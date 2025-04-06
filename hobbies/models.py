@@ -2,7 +2,7 @@ from django.db import models
 
 class Hobby(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    icon = models.ImageField(upload_to='hobby_icons/', blank=True, null=True)  # Store icons in media/hobby_icons/
+    icon = models.ImageField(upload_to='hobby_icons/', blank=True, null=True)  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

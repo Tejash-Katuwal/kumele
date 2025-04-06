@@ -27,13 +27,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
 
+# SECRET_KEY = "cce9ca4c28e9200fef39d536cc043f46"
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 
 
 DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
+# DEBUG = True
+
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
+
+# ALLOWED_HOSTS = []
 
 SITE_ID = 2
 # Application definition
@@ -67,6 +74,8 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 GOOGLE_OAUTH2_CLIENT_ID = os.environ.get("GOOGLE_OAUTH2_CLIENT_ID")
+
+# GOOGLE_OAUTH2_CLIENT_ID = "675550706414-i9f1j9l4t9ifc40o9gnr59pt4kvdq907.apps.googleusercontent.com"
 
 
 
@@ -130,7 +139,9 @@ DATABASES = {
 
 database_url = os.environ.get("DATABASE_URL")
 
-DATABASES["default"] = dj_database_url.parse("postgresql://kumele_user:QXbz8r2zcmHD8qCNGyhpCmsraszdmGXd@dpg-cvp48b3e5dus73ca9r60-a.oregon-postgres.render.com/kumele")
+# DATABASES["default"] = dj_database_url.parse("postgresql://kumele_user:QXbz8r2zcmHD8qCNGyhpCmsraszdmGXd@dpg-cvp48b3e5dus73ca9r60-a.oregon-postgres.render.com/kumele")
+
+DATABASES["default"] = dj_database_url.parse(database_url)
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -192,11 +203,11 @@ EMAIL_HOST_PASSWORD = 'aepiayqwdylqdkag'
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = ['http://localhost:3000',
-                        'http://localhost:5173',
-                        'https://537vg0mp-5174.inc1.devtunnels.ms',
-                        'https://537vg0mp-5173.inc1.devtunnels.ms',
-                        'https://pr9rwc8x-5173.inc1.devtunnels.ms']
+# CORS_ALLOWED_ORIGINS = ['http://localhost:3000',
+#                         'http://localhost:5173',
+#                         'https://537vg0mp-5174.inc1.devtunnels.ms',
+#                         'https://537vg0mp-5173.inc1.devtunnels.ms',
+#                         'https://pr9rwc8x-5173.inc1.devtunnels.ms']
 
 CORS_ALLOW_METHODS = (
     "DELETE",
@@ -235,12 +246,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Cloudinary configuration
+#Cloudinary configuration
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
     'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
     'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
 }
+
+# CLOUDINARY_STORAGE = {
+#     'CLOUD_NAME': "dostiek8h",
+#     'API_KEY': "441397572511426",
+#     'API_SECRET':"SLKq7Ned7ULfz1LoMxWQztvCPms",
+# }
 
 # Use Cloudinary as the default storage for media files
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

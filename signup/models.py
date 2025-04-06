@@ -39,7 +39,7 @@ class CustomUser(AbstractUser):
     
     # New fields for username change tracking and QR code
     last_username_change = models.DateTimeField(null=True, blank=True)
-    qr_code_url = models.URLField(max_length=200, blank=True, default='')
+    qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
