@@ -1,3 +1,4 @@
+# hobbies/serializers.py
 from rest_framework import serializers
 from .models import Hobby
 from signup.models import CustomUser
@@ -5,7 +6,7 @@ from signup.models import CustomUser
 class HobbySerializer(serializers.ModelSerializer):
     class Meta:
         model = Hobby
-        fields = ['id', 'name', 'icon']
+        fields = ['id', 'name', 'icon', 'icon_url']
 
 
 class SelectHobbiesSerializer(serializers.ModelSerializer):

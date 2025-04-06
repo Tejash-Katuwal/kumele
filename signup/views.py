@@ -440,6 +440,15 @@ class LoginView(APIView):
         # Get or create token
         token, _ = Token.objects.get_or_create(user=user)
 
+        # Custom serialization for hobbies to ensure we use icon_url
+        hobbies_data = []
+        for hobby in user.hobbies.all():
+            hobbies_data.append({
+                'id': hobby.id,
+                'name': hobby.name,
+                'icon_url': hobby.icon_url or ''
+            })
+
         # Return user data including the QR code URL
         return Response({
             "message": "Login successful",
@@ -452,8 +461,7 @@ class LoginView(APIView):
             "user_token": token.key,
             "above_legal_age": user.above_legal_age,
             "terms_and_conditions": user.terms_and_conditions,
-            "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
-            "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
-            # "qr_code_url": user.qr_code_url or ''
+            "hobbies": hobbies_data,  # Using our custom hobby data
+            "next_step": "welcome" if user.hobbies.exists() else "hobbies",
             "qr_code_url": user.qr_code_url if user.qr_code_url else ''
         }, status=status.HTTP_200_OK)
