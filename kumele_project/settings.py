@@ -30,9 +30,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
-
-
+ALLOWED_HOSTS = []
 
 SITE_ID = 2
 # Application definition
