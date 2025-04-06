@@ -17,17 +17,8 @@ from django.core.files.storage import default_storage
 import os
 from django.contrib.auth import authenticate
 from hobbies.serializers import HobbySerializer
-import io
-from django.core.files import File
-import cloudinary.uploader
 
 
-
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
-    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
-}
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
@@ -186,9 +177,10 @@ class GoogleSignInView(APIView):
 
             token, _ = Token.objects.get_or_create(user=user)
 
-            
+            print(user.qr_code_url)
+
             # Determine the next step based on user setup status
-            if user.qr_code:  # If QR code exists, user has completed setup
+            if user.qr_code_url:  # If QR code exists, user has completed setup
                 next_step = 'welcome'
             else:
                 next_step = 'permissions'
@@ -206,59 +198,40 @@ class GoogleSignInView(APIView):
                 'terms_and_conditions': user.terms_and_conditions,
                 'hobbies': HobbySerializer(user.hobbies.all(), many=True).data,
                 'next_step': next_step,
-                # 'qr_code_url': user.qr_code_url or ''
-                'qr_code_url': user.qr_code_url if user.qr_code_url else ''
+                'qr_code_url': user.qr_code_url or ''
             }, status=status.HTTP_200_OK)
 
         except ValueError as e:
             return Response({'error': f'Invalid Google token: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
         
 
-# class DeleteUserAPIView(APIView):
-#     permission_classes = [IsAuthenticated]  # Only authenticated users can access
-
-#     def delete(self, request):
-#         try:
-#             user = request.user
-#             email = user.email
-            
-#             # Delete QR code file if it exists
-#             if user.qr_code_url:
-#                 # Extract the file path from the URL
-#                 qr_file_path = user.qr_code_url.replace(settings.MEDIA_URL, '')
-#                 full_path = os.path.join(settings.MEDIA_ROOT, qr_file_path)
-                
-#                 # Check if file exists and delete it
-#                 if os.path.exists(full_path):
-#                     try:
-#                         os.remove(full_path)
-#                         print(f"Successfully deleted QR code file: {full_path}")
-#                     except OSError as e:
-#                         print(f"Error deleting QR code file: {e}")
-#                 else:
-#                     print(f"QR code file not found: {full_path}")
-            
-#             # Now delete the user
-#             user.delete()
-            
-#             return Response(
-#                 {"message": "Your account has been successfully deleted."},
-#                 status=status.HTTP_200_OK
-#             )
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"Failed to delete account: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
 class DeleteUserAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]  # Only authenticated users can access
 
     def delete(self, request):
         try:
             user = request.user
             email = user.email
-            user.delete()  # Cloudinary will handle file deletion if configured
+            
+            # Delete QR code file if it exists
+            if user.qr_code_url:
+                # Extract the file path from the URL
+                qr_file_path = user.qr_code_url.replace(settings.MEDIA_URL, '')
+                full_path = os.path.join(settings.MEDIA_ROOT, qr_file_path)
+                
+                # Check if file exists and delete it
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                        print(f"Successfully deleted QR code file: {full_path}")
+                    except OSError as e:
+                        print(f"Error deleting QR code file: {e}")
+                else:
+                    print(f"QR code file not found: {full_path}")
+            
+            # Now delete the user
+            user.delete()
+            
             return Response(
                 {"message": "Your account has been successfully deleted."},
                 status=status.HTTP_200_OK
@@ -285,66 +258,6 @@ class UpdatePermissionsView(APIView):
 class SetUsernameView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # def post(self, request):
-    #     user = request.user
-    #     action = request.data.get('action')  # 'save' or 'skip'
-
-    #     if action == 'save':
-    #         serializer = SetUsernameSerializer(user, data=request.data, partial=True)
-    #         if serializer.is_valid():
-    #             serializer.save()
-    #             user.last_username_change = timezone.now()
-    #             user.save()
-    #             qr_data = f"Username: {user.username}\nPicture URL: {user.picture_url}"
-    #         else:
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #     elif action == 'skip':
-    #         qr_data = f"Name: {user.name}\nPicture URL: {user.picture_url}"
-    #     else:
-    #         return Response({"error": "Invalid action. Use 'save' or 'skip'"}, status=status.HTTP_400_BAD_REQUEST)
-
-    #     try:
-    #         # Generate QR code
-    #         qr = qrcode.QRCode(version=1, box_size=10, border=4)
-    #         qr.add_data(qr_data)
-    #         qr.make(fit=True)
-    #         img = qr.make_image(fill='black', back_color='white')
-
-    #         # Ensure the qr_codes directory exists
-    #         qr_codes_dir = os.path.join(settings.MEDIA_ROOT, 'qr_codes')
-    #         if not os.path.exists(qr_codes_dir):
-    #             os.makedirs(qr_codes_dir)
-
-    #         # Save QR code to a BytesIO buffer
-    #         buffer = io.BytesIO()
-    #         img.save(buffer, format="PNG")
-    #         buffer.seek(0)
-
-    #         # Save QR code to storage
-    #         qr_filename = f"qr_codes/{user.email}_qr.png"
-    #         qr_path = os.path.join(settings.MEDIA_ROOT, qr_filename)
-    #         print(f"Saving QR code to: {qr_path}")  # Debug
-    #         img.save(qr_path)
-    #         if not os.path.exists(qr_path):
-    #             return Response({"error": "Failed to save QR code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    #         print(f"QR code saved successfully: {qr_path}")  # Debug
-
-    #         # Generate URL for the QR code
-    #         qr_url = f"{settings.MEDIA_URL}{qr_filename}"
-    #         print(f"Generated QR URL: {qr_url}")  # Debug
-    #         user.qr_code_url = qr_url
-    #         user.save()
-
-
-    #         return Response({
-    #             "message": "Username processed successfully",
-    #             "qr_code_url": qr_url,
-    #             "next_step": "hobbies"
-    #         }, status=status.HTTP_200_OK)
-
-    #     except Exception as e:
-    #         print(f"Error generating QR code: {str(e)}")  # Debug
-    #         return Response({"error": f"Failed to generate QR code: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     def post(self, request):
         user = request.user
         action = request.data.get('action')  # 'save' or 'skip'
@@ -370,43 +283,40 @@ class SetUsernameView(APIView):
             qr.make(fit=True)
             img = qr.make_image(fill='black', back_color='white')
 
-            # Save QR code to BytesIO buffer
-            buffer = io.BytesIO()
-            img.save(buffer, format="PNG")
-            buffer.seek(0)
-            
-            # Generate a unique public_id for the upload
-            public_id = f"qr_codes/{user.id}_{int(timezone.now().timestamp())}"
-            
-            # Upload the image directly to Cloudinary
-            upload_result = cloudinary.uploader.upload(
-                buffer,
-                public_id=public_id,
-                folder="qr_codes",
-                resource_type="image"
-            )
-            
-            # Get the secure URL from the upload result
-            qr_code_url = upload_result['secure_url']
+            # Ensure the qr_codes directory exists
+            qr_codes_dir = os.path.join(settings.MEDIA_ROOT, 'qr_codes')
+            if not os.path.exists(qr_codes_dir):
+                os.makedirs(qr_codes_dir)
 
-            # Update the URL field only
-            user.qr_code_url = qr_code_url
-            user.qr_code = None  # Clear the ImageField if you're not using it
-            user.save()
+            # Save QR code to storage
+            qr_filename = f"qr_codes/{user.email}_qr.png"
+            qr_path = os.path.join(settings.MEDIA_ROOT, qr_filename)
+            print(f"Saving QR code to: {qr_path}")  # Debug
+            img.save(qr_path)
             
-            print(f"QR code uploaded to Cloudinary: {qr_code_url}")
+            if not os.path.exists(qr_path):
+                return Response({"error": "Failed to save QR code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"QR code saved successfully: {qr_path}")  # Debug
+
+            # Generate URL for the QR code
+            qr_url = f"{settings.MEDIA_URL}{qr_filename}"
+            print(f"Generated QR URL: {qr_url}")  # Debug
+
+            user.qr_code = qr_filename
+            
+            user.qr_code_url = qr_url
+            user.save()
 
             return Response({
                 "message": "Username processed successfully",
-                "qr_code_url": qr_code_url,
+                "qr_code_url": qr_url,
                 "next_step": "hobbies"
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            print(f"Error generating QR code: {str(e)}")
-            import traceback
-            traceback.print_exc()  # Print the full stack trace for debugging
+            print(f"Error generating QR code: {str(e)}")  # Debug
             return Response({"error": f"Failed to generate QR code: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -440,15 +350,6 @@ class LoginView(APIView):
         # Get or create token
         token, _ = Token.objects.get_or_create(user=user)
 
-        # Custom serialization for hobbies to ensure we use icon_url
-        hobbies_data = []
-        for hobby in user.hobbies.all():
-            hobbies_data.append({
-                'id': hobby.id,
-                'name': hobby.name,
-                'icon_url': hobby.icon_url or ''
-            })
-
         # Return user data including the QR code URL
         return Response({
             "message": "Login successful",
@@ -461,7 +362,7 @@ class LoginView(APIView):
             "user_token": token.key,
             "above_legal_age": user.above_legal_age,
             "terms_and_conditions": user.terms_and_conditions,
-            "hobbies": hobbies_data,  # Using our custom hobby data
-            "next_step": "welcome" if user.hobbies.exists() else "hobbies",
-            "qr_code_url": user.qr_code_url if user.qr_code_url else ''
+            "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
+            "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
+            "qr_code_url": user.qr_code_url or ''
         }, status=status.HTTP_200_OK)

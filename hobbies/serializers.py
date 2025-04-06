@@ -1,4 +1,3 @@
-# hobbies/serializers.py
 from rest_framework import serializers
 from .models import Hobby
 from signup.models import CustomUser
@@ -6,8 +5,11 @@ from signup.models import CustomUser
 class HobbySerializer(serializers.ModelSerializer):
     class Meta:
         model = Hobby
-        fields = ['id', 'name', 'icon', 'icon_url']
-
+        fields = ['id', 'name', 'icon']
+        # Ensure 'icon' is writable as a file upload and readable as a URL
+        extra_kwargs = {
+            'icon': {'required': False}  # Make icon optional if desired
+        }
 
 class SelectHobbiesSerializer(serializers.ModelSerializer):
     hobbies = serializers.PrimaryKeyRelatedField(
@@ -21,7 +23,6 @@ class SelectHobbiesSerializer(serializers.ModelSerializer):
         fields = ['hobbies']
 
     def validate_hobbies(self, value):
-        # Ensure at least 1 hobby and at most 5 hobbies are selected
         if len(value) < 1:
             raise serializers.ValidationError("You must select at least one hobby.")
         if len(value) > 5:

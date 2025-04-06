@@ -1,4 +1,4 @@
-from datetime import timezone
+from django.utils import timezone
 from rest_framework import serializers
 from .models import CustomUser, Referral
 from hobbies.serializers import HobbySerializer
