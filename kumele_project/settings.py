@@ -25,22 +25,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
+# SECRET_KEY = os.environ.get("SECRET_KEY")
 
-# SECRET_KEY = "cce9ca4c28e9200fef39d536cc043f46"
+SECRET_KEY = "cce9ca4c28e9200fef39d536cc043f46"
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
 
-DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
+# DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
-# DEBUG = True
+DEBUG = True
 
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
+# ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
 
-# ALLOWED_HOSTS = []
+ALLOWED_HOSTS = []
 
 SITE_ID = 2
 # Application definition
@@ -137,11 +137,11 @@ DATABASES = {
     }
 }
 
-database_url = os.environ.get("DATABASE_URL")
+# database_url = os.environ.get("DATABASE_URL")
 
 # DATABASES["default"] = dj_database_url.parse("postgresql://kumele_user:QXbz8r2zcmHD8qCNGyhpCmsraszdmGXd@dpg-cvp48b3e5dus73ca9r60-a.oregon-postgres.render.com/kumele")
 
-DATABASES["default"] = dj_database_url.parse(database_url)
+# DATABASES["default"] = dj_database_url.parse(database_url)
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -246,18 +246,3 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-#Cloudinary configuration
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
-    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
-}
-
-# CLOUDINARY_STORAGE = {
-#     'CLOUD_NAME': "dostiek8h",
-#     'API_KEY': "441397572511426",
-#     'API_SECRET':"SLKq7Ned7ULfz1LoMxWQztvCPms",
-# }
-
-# Use Cloudinary as the default storage for media files
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
