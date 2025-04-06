@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-p!63uip41+4784srldd#+!=c2t2(0m@$nhsqo!3t+-p7m!@k=g
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['kumele-1.onrender.com']
 
 SITE_ID = 2
 # Application definition
