@@ -165,7 +165,7 @@
             
             try {
                 // Step 1: Get registration options
-                const optionsResponse = await fetch('https://kfwsdw58-8000.inc1.devtunnels.ms/auth/passkey/register/options/', {
+                const optionsResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/register/options/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
@@ -217,7 +217,7 @@
                 };
                 
                 // Step 4: Verify with server
-                const verifyResponse = await fetch('https://kfwsdw58-8000.inc1.devtunnels.ms/auth/passkey/register/verify/', {
+                const verifyResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/register/verify/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -256,7 +256,7 @@
             
             try {
                 // Step 1: Get authentication options
-                const optionsResponse = await fetch('https://kfwsdw58-8000.inc1.devtunnels.ms/auth/passkey/login/options/', {
+                const optionsResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/login/options/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
@@ -304,7 +304,7 @@
                 };
                 
                 // Step 4: Verify with server
-                const verifyResponse = await fetch('https://kfwsdw58-8000.inc1.devtunnels.ms/auth/passkey/login/verify/', {
+                const verifyResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/login/verify/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
