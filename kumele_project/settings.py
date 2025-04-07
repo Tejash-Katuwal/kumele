@@ -35,10 +35,11 @@ DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
 # DEBUG = True
 
+APP_NAME = "Kumele"
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
 
-# ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = ['eb74-2400-1a00-b030-329f-e593-830c-e3c6-8abc.ngrok-free.app']
 
 SITE_ID = 2
 # Application definition

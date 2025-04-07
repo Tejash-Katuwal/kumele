@@ -1,3 +1,4 @@
+import base64
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -5,8 +6,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import CustomUser, Referral
-from .serializers import SignupSerializer, VerifyEmailSerializer, GoogleSignInSerializer, PermissionsSerializer, SetUsernameSerializer
+from .models import CustomUser, Referral, PasskeyCredential
+from .serializers import (SignupSerializer, 
+    VerifyEmailSerializer, 
+    GoogleSignInSerializer,
+    PermissionsSerializer, 
+    SetUsernameSerializer,
+    PasskeyRegistrationOptionsSerializer, 
+    PasskeyRegistrationVerifySerializer,
+    PasskeyLoginOptionsSerializer,
+    PasskeyLoginVerifySerializer)
 import random
 import string
 from google.oauth2 import id_token
@@ -17,8 +26,21 @@ from django.core.files.storage import default_storage
 import os
 from django.contrib.auth import authenticate
 from hobbies.serializers import HobbySerializer
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+)
+from webauthn.helpers.exceptions import InvalidRegistrationResponse, InvalidAuthenticationResponse
+import secrets
+import json
+from webauthn.helpers.structs import AuthenticatorSelectionCriteria
 
-
+def bytes_to_base64url(bytes_data):
+        """Convert bytes to base64url encoding without padding"""
+        base64_encoded = base64.b64encode(bytes_data).decode('utf-8')
+        return base64_encoded.replace('+', '-').replace('/', '_').rstrip('=')
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
@@ -140,6 +162,7 @@ class GoogleSignInView(APIView):
             name = idinfo.get('name', email.split('@')[0])
             picture_url = idinfo.get('picture', '')
 
+            # Get or create the user
             user, created = CustomUser.objects.get_or_create(
                 email=email,
                 defaults={
@@ -153,21 +176,31 @@ class GoogleSignInView(APIView):
                 }
             )
 
+            # Update fields only if the user already exists (not created)
             if not created:
                 user.name = name
                 user.is_verified = True
                 user.picture_url = picture_url
                 user.save()
 
+            # Prepare data for the serializer, only including fields that are explicitly provided
             data = {
                 'email': email,
                 'name': name,
-                'gender': '',
-                'date_of_birth': None,
-                'referrer_code': request.data.get('referrer_code', ''),
-                'above_legal_age': request.data.get('above_legal_age', False),
-                'terms_and_conditions': request.data.get('terms_and_conditions', False)
+                'picture_url': picture_url,
             }
+
+            # Only include these fields if they are explicitly provided in the request
+            if 'referrer_code' in request.data:
+                data['referrer_code'] = request.data.get('referrer_code', '')
+            if 'above_legal_age' in request.data:
+                data['above_legal_age'] = request.data.get('above_legal_age', user.above_legal_age)
+            if 'terms_and_conditions' in request.data:
+                data['terms_and_conditions'] = request.data.get('terms_and_conditions', user.terms_and_conditions)
+            if 'gender' in request.data:
+                data['gender'] = request.data.get('gender', user.gender)
+            if 'date_of_birth' in request.data:
+                data['date_of_birth'] = request.data.get('date_of_birth', user.date_of_birth)
 
             serializer = GoogleSignInSerializer(user, data=data, partial=True)
             if serializer.is_valid():
@@ -190,8 +223,8 @@ class GoogleSignInView(APIView):
                 'referral_code': user.referral_code,
                 'name': user.name,
                 'email': user.email,
-                'dob': '',
-                'gender': '',
+                'dob': user.date_of_birth if user.date_of_birth else '',
+                'gender': user.gender if user.gender else '',
                 'picture_url': user.picture_url or '',
                 'user_token': token.key,
                 'above_legal_age': user.above_legal_age,
@@ -366,3 +399,316 @@ class LoginView(APIView):
             "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
             "qr_code_url": user.qr_code_url or ''
         }, status=status.HTTP_200_OK)
+    
+
+class UpdateUserDetailsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        data = request.data
+
+        # Update user fields
+        user.date_of_birth = data.get('dob', user.date_of_birth)
+        user.gender = data.get('gender', user.gender)
+        user.above_legal_age = data.get('above_legal_age', user.above_legal_age)
+        user.terms_and_conditions = data.get('terms_and_conditions', user.terms_and_conditions)
+
+        # Handle the referrer_code (the code of the user who referred this new user)
+        referrer_code = data.get('referrer_code', '')
+        if referrer_code:
+            try:
+                referrer = CustomUser.objects.get(referral_code=referrer_code)
+                # Create a Referral record
+                Referral.objects.create(user=referrer, referred_user=user, reward_points=10)
+                # Award points to the referrer
+                referrer.reward_points = (referrer.reward_points or 0) + 10
+                referrer.save()
+            except CustomUser.DoesNotExist:
+                return Response(
+                    {"error": "Invalid referral code"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        print("details: ", user.date_of_birth, user.gender, user.above_legal_age,user.terms_and_conditions )
+
+        user.save()
+
+        return Response(
+            {"message": "User details updated successfully"},
+            status=status.HTTP_200_OK
+        )
+    
+passkey_challenges = {}
+
+class PasskeyRegistrationOptionsView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = PasskeyRegistrationOptionsSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = serializer.validated_data['email']
+        
+        try:
+            user = CustomUser.objects.get(email=email)
+            
+            # Generate a random challenge
+            challenge = secrets.token_urlsafe(32)
+            passkey_challenges[email] = challenge
+            
+            # Get existing credential IDs to exclude
+            existing_credentials = PasskeyCredential.objects.filter(user=user)
+            exclude_credentials = [
+                {"id": cred.credential_id, "type": "public-key"} 
+                for cred in existing_credentials
+            ]
+            
+            # Generate registration options with user_id as bytes
+            options = generate_registration_options(
+                rp_id=request.get_host().split(':')[0],  # Remove port if any
+                rp_name=f"{settings.APP_NAME}",
+                user_id=str(user.id).encode('utf-8'),  # Convert user.id to bytes
+                user_name=user.email,
+                user_display_name=user.name or user.email,
+                challenge=challenge.encode('utf-8'),  # Ensure challenge is also bytes
+                exclude_credentials=exclude_credentials,
+                authenticator_selection=AuthenticatorSelectionCriteria(
+                    user_verification="preferred"  # Set as "preferred", "required", or "discouraged"
+                ),
+                attestation="none"
+            )
+            
+            options_dict = {
+                "rp": {
+                    "name": options.rp.name,
+                    "id": options.rp.id
+                },
+                "user": {
+                    "id": bytes_to_base64url(options.user.id),  # Decode bytes to string for JSON
+                    "name": options.user.name,
+                    "displayName": options.user.display_name
+                },
+                "challenge": options.challenge.decode('utf-8'),  # Decode bytes to string for JSON
+                "pubKeyCredParams": [
+                    {"type": param.type, "alg": param.alg}
+                    for param in options.pub_key_cred_params
+                ],
+                "timeout": options.timeout,
+                "excludeCredentials": [
+                    {"type": cred.type, "id": cred.id.decode('utf-8')}  # Decode bytes to string
+                    for cred in options.exclude_credentials
+                ],
+                "authenticatorSelection": {
+                    "userVerification": options.authenticator_selection.user_verification
+                },
+                "attestation": options.attestation
+            }
+
+            return Response(options_dict, status=status.HTTP_200_OK)
+            
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "User not found. Please create an account first."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+class PasskeyRegistrationVerifyView(APIView):
+    permission_classes = [AllowAny]  # For initial registration
+    
+    def post(self, request):
+        serializer = PasskeyRegistrationVerifySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = serializer.validated_data['email']
+        attestation = serializer.validated_data['attestation']
+        device_name = serializer.validated_data.get('device_name', 'Unknown device')
+        
+        try:
+            user = CustomUser.objects.get(email=email)
+            challenge = passkey_challenges.pop(email, None)
+            
+            if not challenge:
+                return Response(
+                    {"error": "Challenge expired or not found. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            try:
+                rp_id = request.get_host().split(':')[0]  # Remove port if any
+                origin = f"https://{request.get_host()}"
+                
+                # For development, allow http origin if not in production
+                if settings.DEBUG:
+                    if request.headers.get('origin', '').startswith('http://'):
+                        origin = request.headers.get('origin')
+                
+                verification = verify_registration_response(
+                    credential=attestation,
+                    expected_challenge=challenge,
+                    expected_origin=origin,
+                    expected_rp_id=rp_id,
+                )
+                
+                # Store the credential
+                PasskeyCredential.objects.create(
+                    user=user,
+                    credential_id=verification.credential_id,
+                    public_key=verification.credential_public_key,
+                    sign_count=verification.sign_count,
+                    name=device_name,
+                    last_used_at=timezone.now()
+                )
+                
+                # Generate or get token
+                token, _ = Token.objects.get_or_create(user=user)
+                
+                return Response({
+                    "message": "Passkey registered successfully",
+                    "user_token": token.key,
+                    "referral_code": user.referral_code,
+                    "name": user.name,
+                    "email": user.email,
+                    "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
+                    "gender": user.gender,
+                    "picture_url": user.picture_url or '',
+                    "above_legal_age": user.above_legal_age,
+                    "terms_and_conditions": user.terms_and_conditions,
+                    "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
+                    "qr_code_url": user.qr_code_url or '',
+                    "next_step": "welcome" if user.hobbies.exists() else "hobbies"
+                }, status=status.HTTP_200_OK)
+                
+            except InvalidRegistrationResponse as e:
+                return Response({"error": f"Invalid registration: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+class PasskeyLoginOptionsView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = PasskeyLoginOptionsSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = serializer.validated_data.get('email', None)
+        
+        # Generate a challenge
+        challenge = secrets.token_urlsafe(32)
+        
+        allow_credentials = []
+        if email:
+            try:
+                user = CustomUser.objects.get(email=email)
+                credentials = PasskeyCredential.objects.filter(user=user)
+                allow_credentials = [
+                    {"id": cred.credential_id, "type": "public-key"} 
+                    for cred in credentials
+                ]
+                
+                # Store challenge with email
+                passkey_challenges[email] = challenge
+                
+            except CustomUser.DoesNotExist:
+                # Don't reveal that the user doesn't exist
+                pass
+        else:
+            # For passwordless login without email, we store a global challenge
+            passkey_challenges["global"] = challenge
+        
+        # Generate authentication options
+        options = generate_authentication_options(
+            rp_id=request.get_host().split(':')[0],  # Remove port if any
+            challenge=challenge,
+            allow_credentials=allow_credentials,
+            user_verification="preferred"
+        )
+        
+        return Response(options, status=status.HTTP_200_OK)
+    
+
+class PasskeyLoginVerifyView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = PasskeyLoginVerifySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = serializer.validated_data['email']
+        assertion = serializer.validated_data['assertion']
+        
+        try:
+            user = CustomUser.objects.get(email=email)
+            
+            # Get the challenge (either email-specific or global)
+            challenge = passkey_challenges.pop(email, passkey_challenges.pop("global", None))
+            
+            if not challenge:
+                return Response(
+                    {"error": "Challenge expired or not found. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                # Find the credential by ID
+                credential_id = assertion['id']
+                credential = PasskeyCredential.objects.get(
+                    user=user, 
+                    credential_id=credential_id
+                )
+                
+                rp_id = request.get_host().split(':')[0]  # Remove port if any
+                origin = f"https://{request.get_host()}"
+                
+                # For development, allow http origin if not in production
+                if settings.DEBUG:
+                    if request.headers.get('origin', '').startswith('http://'):
+                        origin = request.headers.get('origin')
+                
+                verification = verify_authentication_response(
+                    credential=assertion,
+                    expected_challenge=challenge,
+                    expected_origin=origin,
+                    expected_rp_id=rp_id,
+                    credential_public_key=credential.public_key,
+                    credential_current_sign_count=credential.sign_count,
+                    require_user_verification=False
+                )
+                
+                # Update the counter to prevent replay attacks
+                credential.sign_count = verification.new_sign_count
+                credential.last_used_at = timezone.now()
+                credential.save()
+                
+                # Generate or get token
+                token, _ = Token.objects.get_or_create(user=user)
+                
+                # Return the user information similar to your existing login view
+                return Response({
+                    "message": "Login successful with passkey",
+                    "referral_code": user.referral_code,
+                    "name": user.name,
+                    "email": user.email,
+                    "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
+                    "gender": user.gender,
+                    "picture_url": user.picture_url or '',
+                    "user_token": token.key,
+                    "above_legal_age": user.above_legal_age,
+                    "terms_and_conditions": user.terms_and_conditions,
+                    "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
+                    "next_step": "welcome" if user.hobbies.exists() else "hobbies",
+                    "qr_code_url": user.qr_code_url or ''
+                }, status=status.HTTP_200_OK)
+                
+            except PasskeyCredential.DoesNotExist:
+                return Response({"error": "Invalid credential"}, status=status.HTTP_400_BAD_REQUEST)
+            except InvalidAuthenticationResponse as e:
+                return Response({"error": f"Invalid authentication: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
