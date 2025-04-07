@@ -475,7 +475,7 @@ class PasskeyRegistrationOptionsView(APIView):
                 user_id=str(user.id).encode('utf-8'),  # Convert user.id to bytes
                 user_name=user.email,
                 user_display_name=user.name or user.email,
-                challenge=challenge.encode('utf-8'),  # Ensure challenge is also bytes
+                challenge=challenge,  # Ensure challenge is also bytes
                 exclude_credentials=exclude_credentials,
                 authenticator_selection=AuthenticatorSelectionCriteria(
                     user_verification="preferred"  # Set as "preferred", "required", or "discouraged"
