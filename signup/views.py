@@ -639,8 +639,8 @@ class PasskeyLoginOptionsView(APIView):
             "challenge": bytes_to_base64url(options.challenge),  # Convert challenge to base64url
             "allowCredentials": [
                 {
-                    "type": cred.type,
-                    "id": cred.id if isinstance(cred.id, str) else bytes_to_base64url(cred.id)  # Convert id to base64url if it's bytes
+                    "type": cred["type"],
+                    "id": cred["id"] if isinstance(cred["id"], str) else bytes_to_base64url(cred["id"])  # Convert id to base64url if it's bytes
                 }
                 for cred in options.allow_credentials
             ],
