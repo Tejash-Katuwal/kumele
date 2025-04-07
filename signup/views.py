@@ -529,6 +529,9 @@ class PasskeyRegistrationVerifyView(APIView):
         try:
             user = CustomUser.objects.get(email=email)
             challenge = passkey_challenges.pop(email, None)
+
+
+            challenge_bytes = challenge.encode('utf-8')
             
             if not challenge:
                 return Response(
@@ -547,7 +550,7 @@ class PasskeyRegistrationVerifyView(APIView):
                 
                 verification = verify_registration_response(
                     credential=attestation,
-                    expected_challenge=challenge,
+                    expected_challenge=challenge_bytes,
                     expected_origin=origin,
                     expected_rp_id=rp_id,
                 )

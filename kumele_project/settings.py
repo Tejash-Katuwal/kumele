@@ -23,23 +23,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
+# SECRET_KEY = os.environ.get("SECRET_KEY")
 
-# SECRET_KEY = "cce9ca4c28e9200fef39d536cc043f46"
+SECRET_KEY = "cce9ca4c28e9200fef39d536cc043f46"
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
 
-DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
+# DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
-# DEBUG = True
+DEBUG = True
 
 APP_NAME = "Kumele"
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
+# ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
 
-# ALLOWED_HOSTS = ['eb74-2400-1a00-b030-329f-e593-830c-e3c6-8abc.ngrok-free.app']
+ALLOWED_HOSTS = []
 
 SITE_ID = 2
 # Application definition
@@ -72,9 +72,9 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-GOOGLE_OAUTH2_CLIENT_ID = os.environ.get("GOOGLE_OAUTH2_CLIENT_ID")
+# GOOGLE_OAUTH2_CLIENT_ID = os.environ.get("GOOGLE_OAUTH2_CLIENT_ID")
 
-# GOOGLE_OAUTH2_CLIENT_ID = "675550706414-i9f1j9l4t9ifc40o9gnr59pt4kvdq907.apps.googleusercontent.com"
+GOOGLE_OAUTH2_CLIENT_ID = "675550706414-i9f1j9l4t9ifc40o9gnr59pt4kvdq907.apps.googleusercontent.com"
 
 
 
@@ -136,11 +136,11 @@ DATABASES = {
     }
 }
 
-database_url = os.environ.get("DATABASE_URL")
+# database_url = os.environ.get("DATABASE_URL")
 
 # DATABASES["default"] = dj_database_url.parse("postgresql://kumele_user:P2ms0XoAwextIiDv8k98zYkMDBML6Zrr@dpg-cvpc5e49c44c73c1g800-a.oregon-postgres.render.com/kumele_gzza")
 
-DATABASES["default"] = dj_database_url.parse(database_url)
+# DATABASES["default"] = dj_database_url.parse(database_url)
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
