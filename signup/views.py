@@ -42,6 +42,16 @@ def bytes_to_base64url(bytes_data):
         base64_encoded = base64.b64encode(bytes_data).decode('utf-8')
         return base64_encoded.replace('+', '-').replace('/', '_').rstrip('=')
 
+def base64url_to_bytes(base64url_str):
+    """Convert a base64url-encoded string to bytes."""
+    # Replace base64url characters with standard base64 characters
+    base64_str = base64url_str.replace('-', '+').replace('_', '/')
+    # Add padding if necessary
+    padding = '=' * (4 - len(base64_str) % 4) if len(base64_str) % 4 else ''
+    base64_str += padding
+    # Decode to bytes
+    return base64.b64decode(base64_str)
+
 class SignupView(APIView):
     permission_classes = [AllowAny]
     def post(self, request):
@@ -676,10 +686,12 @@ class PasskeyLoginVerifyView(APIView):
             
             try:
                 # Find the credential by ID
-                credential_id = assertion['id']
+                credential_id_str = assertion['id']  # This is a base64url-encoded string
+                credential_id = base64url_to_bytes(credential_id_str)  # Convert to bytes
+                
                 credential = PasskeyCredential.objects.get(
                     user=user, 
-                    credential_id=credential_id
+                    credential_id=credential_id  # Use bytes for the query
                 )
                 
                 rp_id = request.get_host().split(':')[0]  # Remove port if any
