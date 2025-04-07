@@ -455,8 +455,11 @@ class PasskeyRegistrationOptionsView(APIView):
             user = CustomUser.objects.get(email=email)
             
             # Generate a random challenge
-            challenge = secrets.token_urlsafe(32)
+            challenge = secrets.token_bytes(32)
             passkey_challenges[email] = challenge
+
+
+            print(f"Stored challenge for {email}: {challenge.hex()}")
             
             # Get existing credential IDs to exclude
             existing_credentials = PasskeyCredential.objects.filter(user=user)
@@ -490,7 +493,7 @@ class PasskeyRegistrationOptionsView(APIView):
                     "name": options.user.name,
                     "displayName": options.user.display_name
                 },
-                "challenge": options.challenge.decode('utf-8'),  # Decode bytes to string for JSON
+                "challenge": bytes_to_base64url(options.challenge),
                 "pubKeyCredParams": [
                     {"type": param.type, "alg": param.alg}
                     for param in options.pub_key_cred_params
@@ -515,7 +518,7 @@ class PasskeyRegistrationOptionsView(APIView):
             )
         
 class PasskeyRegistrationVerifyView(APIView):
-    permission_classes = [AllowAny]  # For initial registration
+    permission_classes = [AllowAny]
     
     def post(self, request):
         serializer = PasskeyRegistrationVerifySerializer(data=request.data)
@@ -529,9 +532,8 @@ class PasskeyRegistrationVerifyView(APIView):
         try:
             user = CustomUser.objects.get(email=email)
             challenge = passkey_challenges.pop(email, None)
-
-
-            challenge_bytes = challenge.encode('utf-8')
+            
+            print(f"Retrieved challenge for {email}: {challenge.hex() if challenge else None}")  # Log as hex
             
             if not challenge:
                 return Response(
@@ -540,17 +542,16 @@ class PasskeyRegistrationVerifyView(APIView):
                 )
                 
             try:
-                rp_id = request.get_host().split(':')[0]  # Remove port if any
+                rp_id = request.get_host().split(':')[0]
                 origin = f"https://{request.get_host()}"
                 
-                # For development, allow http origin if not in production
                 if settings.DEBUG:
                     if request.headers.get('origin', '').startswith('http://'):
                         origin = request.headers.get('origin')
                 
                 verification = verify_registration_response(
                     credential=attestation,
-                    expected_challenge=challenge_bytes,
+                    expected_challenge=challenge,  # Already in bytes
                     expected_origin=origin,
                     expected_rp_id=rp_id,
                 )
