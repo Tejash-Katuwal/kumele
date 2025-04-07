@@ -48,6 +48,7 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return self.email
 
+
 class Referral(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='referrals')  # Referrer
     referred_user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='referred_by')
@@ -55,3 +56,22 @@ class Referral(models.Model):
 
     def __str__(self):
         return f"{self.user.email} referred {self.referred_user.email}"
+    
+
+class PasskeyCredential(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='passkeys')
+    credential_id = models.BinaryField(unique=True)
+    public_key = models.BinaryField()
+    sign_count = models.BigIntegerField(default=0)
+    name = models.CharField(max_length=100, blank=True)  # Device or credential name
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['credential_id']),
+            models.Index(fields=['user']),
+        ]
+        
+    def __str__(self):
+        return f"Passkey for {self.user.email} ({self.name})"

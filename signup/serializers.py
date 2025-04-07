@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import CustomUser, Referral
+from .models import CustomUser, Referral, PasskeyCredential
 from hobbies.serializers import HobbySerializer
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -129,3 +129,20 @@ class LoginSerializer(serializers.Serializer):
     class Meta:
         model = CustomUser
         fields = ['email', 'password', 'hobbies']
+
+
+class PasskeyRegistrationOptionsSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    device_name = serializers.CharField(max_length=100, required=False)
+
+class PasskeyRegistrationVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    attestation = serializers.JSONField()
+    device_name = serializers.CharField(max_length=100, required=False)
+
+class PasskeyLoginOptionsSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)  # Optional, user might not provide email upfront
+
+class PasskeyLoginVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    assertion = serializers.JSONField()
