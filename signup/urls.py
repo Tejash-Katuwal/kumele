@@ -11,6 +11,7 @@ from .views import (SignupView,
     PasskeyRegistrationVerifyView,
     PasskeyLoginOptionsView,
     PasskeyLoginVerifyView,
+    PasskeyTestPageView,
 )
 
 urlpatterns = [
@@ -26,5 +27,6 @@ urlpatterns = [
     path('passkey/register/verify/', PasskeyRegistrationVerifyView.as_view(), name='passkey_register_verify'),
     path('passkey/login/options/', PasskeyLoginOptionsView.as_view(), name='passkey_login_options'),
     path('passkey/login/verify/', PasskeyLoginVerifyView.as_view(), name='passkey_login_verify'),
+    path('passkey-test-page/', PasskeyTestPageView.as_view(), name='passkey-test-page'),
 
 ]
