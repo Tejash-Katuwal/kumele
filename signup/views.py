@@ -712,3 +712,12 @@ class PasskeyLoginVerifyView(APIView):
                 
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+from django.shortcuts import render
+
+
+class PasskeyTestPageView(APIView):
+    permission_classes = [AllowAny]  # Allow anyone to access this page
+
+    def get(self, request):
+        return render(request, 'signup/passkey_test_page.html')

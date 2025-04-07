@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passkey Testing</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .panel {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 24px;
+        }
+        h2 {
+            color: #3498db;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 4px;
+            background-color: #f1f1f1;
+            min-height: 100px;
+            max-height: 300px;
+            overflow: auto;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>Passkey Testing</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Register a Passkey</h2>
+            <div class="form-group">
+                <label for="registerEmail">Email:</label>
+                <input type="email" id="registerEmail" placeholder="Your email">
+            </div>
+            <div class="form-group">
+                <label for="deviceName">Device Name:</label>
+                <input type="text" id="deviceName" placeholder="My Device" value="My Device">
+            </div>
+            <button id="registerBtn">Register Passkey</button>
+            <div class="status" id="registerStatus">Status will appear here</div>
+        </div>
+        
+        <div class="panel">
+            <h2>Login with Passkey</h2>
+            <div class="form-group">
+                <label for="loginEmail">Email:</label>
+                <input type="email" id="loginEmail" placeholder="Your email">
+            </div>
+            <button id="loginBtn">Login with Passkey</button>
+            <div class="status" id="loginStatus">Status will appear here</div>
+        </div>
+    </div>
+
+    <script>
+        // Base64 URL encoding/decoding helpers
+        function base64UrlToBuffer(base64Url) {
+            try {
+                // First convert base64url to regular base64
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                
+                // Add padding if needed
+                let padded = base64;
+                while (padded.length % 4 !== 0) {
+                    padded += '=';
+                }
+                
+                // Decode the base64 string to binary
+                const binary = atob(padded);
+                
+                // Convert binary to ArrayBuffer
+                const buffer = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    buffer[i] = binary.charCodeAt(i);
+                }
+                return buffer.buffer;
+            } catch (error) {
+                console.error('Base64 conversion error:', error, 'Input string:', base64Url);
+                throw new Error('Invalid base64 encoding in challenge or credentials');
+            }
+        }
+
+        function bufferToBase64Url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const base64 = btoa(binary);
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        // Register a passkey
+        async function registerPasskey() {
+            const email = document.getElementById('registerEmail').value;
+            const deviceName = document.getElementById('deviceName').value || 'My Device';
+            const statusEl = document.getElementById('registerStatus');
+            
+            if (!email) {
+                statusEl.innerHTML = '<span class="error">Please enter an email</span>';
+                return;
+            }
+            
+            statusEl.innerHTML = 'Requesting registration options...';
+            
+            try {
+                // Step 1: Get registration options
+                const optionsResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/register/options/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                if (!optionsResponse.ok) {
+                    const errorData = await optionsResponse.json();
+                    throw new Error(errorData.error || 'Failed to get registration options');
+                }
+
+                const options = await optionsResponse.json();
+                statusEl.innerHTML = 'Got options from server, preparing WebAuthn request...';
+
+                // Convert challenge from base64url to ArrayBuffer only if it's a string
+                if (typeof options.challenge === 'string') {
+                    options.challenge = base64UrlToBuffer(options.challenge);
+                }
+
+                // Convert excluded credentials if any
+                if (options.excludeCredentials) {
+                    options.excludeCredentials = options.excludeCredentials.map(cred => ({
+                        ...cred,
+                        id: typeof cred.id === 'string' ? base64UrlToBuffer(cred.id) : cred.id
+                    }));
+                }
+
+                // Handle user object
+                if (typeof options.user.id === 'string') {
+                    options.user.id = base64UrlToBuffer(options.user.id);
+                }
+                
+                // Step 2: Create credential with browser WebAuthn API
+                statusEl.innerHTML = 'Please follow your browser\'s instructions to create a passkey...';
+                const credential = await navigator.credentials.create({
+                    publicKey: options
+                });
+                
+                statusEl.innerHTML = 'Credential created, sending to server for verification...';
+                
+                // Step 3: Prepare for sending to server
+                const attestationResponse = {
+                    id: credential.id,
+                    rawId: bufferToBase64Url(credential.rawId),
+                    response: {
+                        clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                        attestationObject: bufferToBase64Url(credential.response.attestationObject)
+                    },
+                    type: credential.type
+                };
+                
+                // Step 4: Verify with server
+                const verifyResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/register/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        attestation: attestationResponse,
+                        device_name: deviceName
+                    })
+                });
+                
+                if (!verifyResponse.ok) {
+                    const errorData = await verifyResponse.json();
+                    throw new Error(errorData.error || 'Failed to verify registration');
+                }
+                
+                const result = await verifyResponse.json();
+                statusEl.innerHTML = `<span class="success">Passkey registered successfully!</span>
+                                    <pre>${JSON.stringify(result, null, 2)}</pre>`;
+                
+            } catch (error) {
+                console.error('Registration error:', error);
+                statusEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        // Login with a passkey
+        async function loginWithPasskey() {
+            const email = document.getElementById('loginEmail').value;
+            const statusEl = document.getElementById('loginStatus');
+            
+            if (!email) {
+                statusEl.innerHTML = '<span class="error">Please enter an email</span>';
+                return;
+            }
+            
+            statusEl.innerHTML = 'Requesting login options...';
+            
+            try {
+                // Step 1: Get authentication options
+                const optionsResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/login/options/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                if (!optionsResponse.ok) {
+                    const errorData = await optionsResponse.json();
+                    throw new Error(errorData.error || 'Failed to get login options');
+                }
+                
+                const options = await optionsResponse.json();
+                statusEl.innerHTML = 'Got options from server, preparing WebAuthn request...';
+                
+                // Convert base64url to ArrayBuffer
+                options.challenge = base64UrlToBuffer(options.challenge);
+                
+                // Convert allowed credentials if any
+                if (options.allowCredentials && options.allowCredentials.length > 0) {
+                    options.allowCredentials = options.allowCredentials.map(cred => ({
+                        ...cred,
+                        id: base64UrlToBuffer(cred.id)
+                    }));
+                }
+                
+                // Step 2: Get credential with browser WebAuthn API
+                statusEl.innerHTML = 'Please follow your browser\'s instructions to use your passkey...';
+                const credential = await navigator.credentials.get({
+                    publicKey: options
+                });
+                
+                statusEl.innerHTML = 'Credential retrieved, sending to server for verification...';
+                
+                // Step 3: Prepare for sending to server
+                const assertionResponse = {
+                    id: credential.id,
+                    rawId: bufferToBase64Url(credential.rawId),
+                    response: {
+                        clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                        authenticatorData: bufferToBase64Url(credential.response.authenticatorData),
+                        signature: bufferToBase64Url(credential.response.signature),
+                        userHandle: credential.response.userHandle ? 
+                            bufferToBase64Url(credential.response.userHandle) : null
+                    },
+                    type: credential.type
+                };
+                
+                // Step 4: Verify with server
+                const verifyResponse = await fetch('https://kumele-1.onrender.com/auth/passkey/login/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        assertion: assertionResponse
+                    })
+                });
+                
+                if (!verifyResponse.ok) {
+                    const errorData = await verifyResponse.json();
+                    throw new Error(errorData.error || 'Failed to verify login');
+                }
+                
+                const result = await verifyResponse.json();
+                statusEl.innerHTML = `<span class="success">Login successful!</span>
+                                    <pre>${JSON.stringify(result, null, 2)}</pre>`;
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                statusEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        // Event listeners
+        document.getElementById('registerBtn').addEventListener('click', registerPasskey);
+        document.getElementById('loginBtn').addEventListener('click', loginWithPasskey);
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'92cb57e47bb902e4',t:'MTc0NDA0Nzk3NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
