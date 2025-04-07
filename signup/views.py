@@ -591,6 +591,7 @@ class PasskeyRegistrationVerifyView(APIView):
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
         
+
 class PasskeyLoginOptionsView(APIView):
     permission_classes = [AllowAny]
     
@@ -601,8 +602,8 @@ class PasskeyLoginOptionsView(APIView):
         
         email = serializer.validated_data.get('email', None)
         
-        # Generate a challenge
-        challenge = secrets.token_urlsafe(32)
+        # Generate a challenge as bytes
+        challenge = secrets.token_bytes(32)  # Use bytes for consistency
         
         allow_credentials = []
         if email:
@@ -627,12 +628,27 @@ class PasskeyLoginOptionsView(APIView):
         # Generate authentication options
         options = generate_authentication_options(
             rp_id=request.get_host().split(':')[0],  # Remove port if any
-            challenge=challenge,
+            challenge=challenge,  # Pass challenge as bytes
             allow_credentials=allow_credentials,
             user_verification="preferred"
         )
         
-        return Response(options, status=status.HTTP_200_OK)
+        # Convert options to a JSON-serializable dictionary
+        options_dict = {
+            "rpId": options.rp_id,
+            "challenge": bytes_to_base64url(options.challenge),  # Convert challenge to base64url
+            "allowCredentials": [
+                {
+                    "type": cred.type,
+                    "id": cred.id if isinstance(cred.id, str) else bytes_to_base64url(cred.id)  # Convert id to base64url if it's bytes
+                }
+                for cred in options.allow_credentials
+            ],
+            "userVerification": options.user_verification,
+            "timeout": options.timeout
+        }
+        
+        return Response(options_dict, status=status.HTTP_200_OK)
     
 
 class PasskeyLoginVerifyView(APIView):
