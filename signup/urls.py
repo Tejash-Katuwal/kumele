@@ -2,9 +2,9 @@ from django.urls import path
 from .views import (SignupView,
     VerifyEmailView, 
     GoogleSignInView, 
-    DeleteUserAPIView, 
     UpdatePermissionsView, 
     SetUsernameView, 
+    DeleteUserAccountView,
     LoginView, 
     UpdateUserDetailsView,
     PasskeyRegistrationOptionsView,
@@ -18,7 +18,6 @@ urlpatterns = [
     path('signup/', SignupView.as_view(), name='signup'),
     path('verify-email/', VerifyEmailView.as_view(), name='verify_email'),
     path('google-signin/', GoogleSignInView.as_view(), name='google_signin'),
-    path('user/delete/', DeleteUserAPIView.as_view(), name='delete-user'),
     path('update-permissions/', UpdatePermissionsView.as_view(), name='update-permissions'),
     path('set-username/', SetUsernameView.as_view(), name='set-username'),
     path('login/', LoginView.as_view(), name='login'),
@@ -28,5 +27,6 @@ urlpatterns = [
     path('passkey/login/options/', PasskeyLoginOptionsView.as_view(), name='passkey_login_options'),
     path('passkey/login/verify/', PasskeyLoginVerifyView.as_view(), name='passkey_login_verify'),
     path('passkey-test-page/', PasskeyTestPageView.as_view(), name='passkey-test-page'),
+    path('account/delete/', DeleteUserAccountView.as_view(), name='delete-account'), 
 
 ]

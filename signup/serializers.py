@@ -144,5 +144,5 @@ class PasskeyLoginOptionsSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False)  # Optional, user might not provide email upfront
 
 class PasskeyLoginVerifySerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    # email = serializers.EmailField()
     assertion = serializers.JSONField()

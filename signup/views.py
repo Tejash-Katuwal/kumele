@@ -36,6 +36,7 @@ from webauthn.helpers.exceptions import InvalidRegistrationResponse, InvalidAuth
 import secrets
 import json
 from webauthn.helpers.structs import AuthenticatorSelectionCriteria
+from rest_framework.authentication import TokenAuthentication
 
 def bytes_to_base64url(bytes_data):
         """Convert bytes to base64url encoding without padding"""
@@ -233,6 +234,7 @@ class GoogleSignInView(APIView):
                 'referral_code': user.referral_code,
                 'name': user.name,
                 'email': user.email,
+                'username': user.username or '',
                 'dob': user.date_of_birth if user.date_of_birth else '',
                 'gender': user.gender if user.gender else '',
                 'picture_url': user.picture_url or '',
@@ -246,44 +248,6 @@ class GoogleSignInView(APIView):
 
         except ValueError as e:
             return Response({'error': f'Invalid Google token: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-        
-
-class DeleteUserAPIView(APIView):
-    permission_classes = [IsAuthenticated]  # Only authenticated users can access
-
-    def delete(self, request):
-        try:
-            user = request.user
-            email = user.email
-            
-            # Delete QR code file if it exists
-            if user.qr_code_url:
-                # Extract the file path from the URL
-                qr_file_path = user.qr_code_url.replace(settings.MEDIA_URL, '')
-                full_path = os.path.join(settings.MEDIA_ROOT, qr_file_path)
-                
-                # Check if file exists and delete it
-                if os.path.exists(full_path):
-                    try:
-                        os.remove(full_path)
-                        print(f"Successfully deleted QR code file: {full_path}")
-                    except OSError as e:
-                        print(f"Error deleting QR code file: {e}")
-                else:
-                    print(f"QR code file not found: {full_path}")
-            
-            # Now delete the user
-            user.delete()
-            
-            return Response(
-                {"message": "Your account has been successfully deleted."},
-                status=status.HTTP_200_OK
-            )
-        except Exception as e:
-            return Response(
-                {"error": f"Failed to delete account: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
         
 
 class UpdatePermissionsView(APIView):
@@ -361,6 +325,57 @@ class SetUsernameView(APIView):
             return Response({"error": f"Failed to generate QR code: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
+class DeleteUserAccountView(APIView):
+    """
+    API view to delete a user account with token authentication.
+    Requires the user to be authenticated with a valid token.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request):
+        try:
+            user = request.user
+            
+            # Delete QR code file if it exists
+            if user.qr_code_url:
+                # Extract the file path from the URL
+                qr_file_path = user.qr_code_url.replace(settings.MEDIA_URL, '')
+                full_path = os.path.join(settings.MEDIA_ROOT, qr_file_path)
+                
+                # Check if file exists and delete it
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                    except OSError as e:
+                        print(f"Error deleting QR code file: {e}")
+            
+            # Log the related data being deleted
+            passkey_count = PasskeyCredential.objects.filter(user=user).count()
+            
+            # Get the user token to delete it manually
+            try:
+                token = Token.objects.get(user=user)
+                token.delete()
+            except Token.DoesNotExist:
+                pass
+                
+            # Delete the user - this will cascade delete PasskeyCredential and other related objects
+            user.delete()
+            
+            return Response(
+                {
+                    "message": "Your account has been successfully deleted.",
+                    "details": f"Removed {passkey_count} passkeys and all related data."
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to delete account: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -399,6 +414,7 @@ class LoginView(APIView):
             "referral_code": user.referral_code,
             "name": user.name,
             "email": user.email,
+            'username': user.username or '',
             "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
             "gender": user.gender,
             "picture_url": user.picture_url or '',
@@ -468,7 +484,6 @@ class PasskeyRegistrationOptionsView(APIView):
             challenge = secrets.token_bytes(32)
             passkey_challenges[email] = challenge
 
-
             print(f"Stored challenge for {email}: {challenge.hex()}")
             
             # Get existing credential IDs to exclude
@@ -478,17 +493,21 @@ class PasskeyRegistrationOptionsView(APIView):
                 for cred in existing_credentials
             ]
             
+            # For local development, use localhost
+            rp_id = "localhost"
+            
             # Generate registration options with user_id as bytes
             options = generate_registration_options(
-                rp_id=request.get_host().split(':')[0],  # Remove port if any
+                # rp_id=request.get_host().split(':')[0],  # Remove port if any
+                rp_id = rp_id,
                 rp_name=f"{settings.APP_NAME}",
-                user_id=str(user.id).encode('utf-8'),  # Convert user.id to bytes
+                user_id=str(user.id).encode('utf-8'),
                 user_name=user.email,
                 user_display_name=user.name or user.email,
-                challenge=challenge,  # Ensure challenge is also bytes
+                challenge=challenge,
                 exclude_credentials=exclude_credentials,
                 authenticator_selection=AuthenticatorSelectionCriteria(
-                    user_verification="preferred"  # Set as "preferred", "required", or "discouraged"
+                    user_verification="preferred"
                 ),
                 attestation="none"
             )
@@ -499,7 +518,7 @@ class PasskeyRegistrationOptionsView(APIView):
                     "id": options.rp.id
                 },
                 "user": {
-                    "id": bytes_to_base64url(options.user.id),  # Decode bytes to string for JSON
+                    "id": bytes_to_base64url(options.user.id),
                     "name": options.user.name,
                     "displayName": options.user.display_name
                 },
@@ -510,7 +529,7 @@ class PasskeyRegistrationOptionsView(APIView):
                 ],
                 "timeout": options.timeout,
                 "excludeCredentials": [
-                    {"type": cred.type, "id": cred.id.decode('utf-8')}  # Decode bytes to string
+                    {"type": cred.type, "id": cred.id.decode('utf-8')}
                     for cred in options.exclude_credentials
                 ],
                 "authenticatorSelection": {
@@ -585,6 +604,7 @@ class PasskeyRegistrationVerifyView(APIView):
                     "referral_code": user.referral_code,
                     "name": user.name,
                     "email": user.email,
+                    'username': user.username or '',
                     "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
                     "gender": user.gender,
                     "picture_url": user.picture_url or '',
@@ -612,10 +632,13 @@ class PasskeyLoginOptionsView(APIView):
         # Store a global challenge for passwordless login
         passkey_challenges["global"] = challenge
         
+        # For local development, use localhost
+        rp_id = "localhost"
+        
         # Generate authentication options without any allow_credentials
-        # This allows any registered passkey to be used
         options = generate_authentication_options(
-            rp_id=request.get_host().split(':')[0],
+            # rp_id=request.get_host().split(':')[0],
+            rp_id=rp_id,
             challenge=challenge,
             allow_credentials=[],  # Empty list means any registered passkey can be used
             user_verification="preferred"
@@ -661,13 +684,16 @@ class PasskeyLoginVerifyView(APIView):
             credential = PasskeyCredential.objects.get(credential_id=credential_id)
             user = credential.user
             
-            rp_id = request.get_host().split(':')[0]
-            origin = f"https://{request.get_host()}"
+            # rp_id = request.get_host().split(':')[0]
+            # origin = f"https://{request.get_host()}"
             
-            # For development, allow http origin if not in production
-            if settings.DEBUG:
-                if request.headers.get('origin', '').startswith('http://'):
-                    origin = request.headers.get('origin')
+            # # For development, allow http origin if not in production
+            # if settings.DEBUG:
+            #     if request.headers.get('origin', '').startswith('http://'):
+            #         origin = request.headers.get('origin')
+
+            rp_id = "localhost"
+            origin = "http://localhost:5173"
             
             verification = verify_authentication_response(
                 credential=assertion,
@@ -693,6 +719,7 @@ class PasskeyLoginVerifyView(APIView):
                 "referral_code": user.referral_code,
                 "name": user.name,
                 "email": user.email,
+                'username': user.username or '',
                 "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
                 "gender": user.gender,
                 "picture_url": user.picture_url or '',
