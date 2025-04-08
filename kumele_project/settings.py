@@ -33,13 +33,18 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 
 DEBUG = os.environ.get("DEBUG", "FALSE").lower() == "true"
 
+# For local development, override DEBUG
 # DEBUG = True
 
 APP_NAME = "Kumele"
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ")
 
-# ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = [
+#     'localhost',
+#     '127.0.0.1',
+#     'kumele-1.onrender.com',
+# ]
 
 SITE_ID = 2
 # Application definition
@@ -47,6 +52,7 @@ SITE_ID = 2
 INSTALLED_APPS = [
     'signup',
     'hobbies',
+    'userprofile',
     'rest_framework',
     'rest_framework.authtoken',
     'django.contrib.admin',
@@ -146,9 +152,6 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
 }
 
 # Password validation
@@ -202,11 +205,11 @@ EMAIL_HOST_PASSWORD = 'aepiayqwdylqdkag'
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-# CORS_ALLOWED_ORIGINS = ['http://localhost:3000',
-#                         'http://localhost:5173',
-#                         'https://537vg0mp-5174.inc1.devtunnels.ms',
-#                         'https://537vg0mp-5173.inc1.devtunnels.ms',
-#                         'https://pr9rwc8x-5173.inc1.devtunnels.ms']
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://localhost:8000',
+    'https://kumele-1.onrender.com',
+]
 
 CORS_ALLOW_METHODS = (
     "DELETE",
@@ -225,12 +228,26 @@ CORS_ALLOW_HEADERS = (
     "x-csrftoken",
     "x-requested-with",
     "x-api-key", 
-    'x-domain-name', 
+    'x-domain-name',
+    'origin',
+    'x-requested-with',
+    'content-type',
+    'accept',
+    'x-csrftoken',
 )
 
 # Also add these settings
-CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['X-API-Key']
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_EXPOSE_HEADERS = ['X-API-Key']
+
+# # Add this to ensure proper origin handling
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Add this for local development
+USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
 
 AUTH_USER_MODEL = 'signup.CustomUser'
 

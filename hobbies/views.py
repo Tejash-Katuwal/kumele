@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import Hobby
 from .serializers import HobbySerializer, SelectHobbiesSerializer
+from django.conf import settings
+import os
 
 class ListHobbiesView(APIView):
     permission_classes = [AllowAny]  
@@ -77,3 +79,4 @@ class UploadHobbyView(APIView):
                 {"errors": errors},
                 status=status.HTTP_400_BAD_REQUEST
             )
+

@@ -21,7 +21,7 @@ class CustomUser(AbstractUser):
     reward_points = models.IntegerField(default=0)
 
     hobbies = models.ManyToManyField('hobbies.Hobby', related_name='users', blank=True)
-
+    following = models.ManyToManyField('self', symmetrical=False, related_name='followers', blank=True)
 
     allow_photos = models.CharField(max_length=20, choices=[
         ('none', 'None'),
@@ -41,6 +41,14 @@ class CustomUser(AbstractUser):
     last_username_change = models.DateTimeField(null=True, blank=True)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
     qr_code_url = models.URLField(max_length=200, blank=True, default='')
+
+    bio = models.TextField(max_length=500, blank=True, default="")  
+    sound_notifications = models.BooleanField(default=True) 
+    email_notifications = models.BooleanField(default=False)
+    theme_mode = models.CharField(max_length=10, choices=[
+        ('bright', 'Bright'),
+        ('night', 'Night'),
+    ], default='bright')
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
