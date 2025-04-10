@@ -59,4 +59,4 @@ class ChangePasswordSerializer(serializers.Serializer):
 class UpdateProfileImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['picture_url']
+        fields = ['picture_url', 'profile_pic_url']

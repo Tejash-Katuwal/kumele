@@ -19,6 +19,7 @@ class CustomUser(AbstractUser):
     verification_code = models.CharField(max_length=6, blank=True, null=True)
     referral_code = models.CharField(max_length=36, unique=True, default=uuid.uuid4)
     reward_points = models.IntegerField(default=0)
+    profile_pic_url = models.URLField(max_length=200, blank=True, default='')
 
     hobbies = models.ManyToManyField('hobbies.Hobby', related_name='users', blank=True)
     following = models.ManyToManyField('self', symmetrical=False, related_name='followers', blank=True)
@@ -56,6 +57,16 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return self.email
 
+    def save(self, *args, **kwargs):
+        # If notifications are disabled, also disable sound and email notifications
+        if not self.allow_notifications:
+            self.sound_notifications = False
+            self.email_notifications = False
+        super().save(*args, **kwargs)
+
+    def get_picture_url(self):
+        """Return profile_pic_url if available, otherwise fall back to picture_url"""
+        return self.profile_pic_url if self.profile_pic_url else self.picture_url
 
 class Referral(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='referrals')  # Referrer
