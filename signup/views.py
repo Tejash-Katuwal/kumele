@@ -134,11 +134,13 @@ class VerifyEmailView(APIView):
                         "email": user.email,
                         "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
                         "gender": user.gender,
-                        "picture_url": user.picture_url or '',
+                        "picture_url": user.get_picture_url() or '',
                         "user_token": token.key,
                         "above_legal_age": user.above_legal_age,
                         "terms_and_conditions": user.terms_and_conditions,
                         "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
+                        "sound_notification": user.sound_notifications,
+                        "email_notification": user.email_notifications,
                         "next_step": "permissions" 
                     }, status=status.HTTP_200_OK)
                 else:
@@ -237,13 +239,15 @@ class GoogleSignInView(APIView):
                 'username': user.username or '',
                 'dob': user.date_of_birth if user.date_of_birth else '',
                 'gender': user.gender if user.gender else '',
-                'picture_url': user.picture_url or '',
+                'picture_url': user.get_picture_url() or '',
                 'user_token': token.key,
                 'above_legal_age': user.above_legal_age,
                 'terms_and_conditions': user.terms_and_conditions,
                 'hobbies': HobbySerializer(user.hobbies.all(), many=True).data,
                 'next_step': next_step,
-                'qr_code_url': user.qr_code_url or ''
+                'qr_code_url': user.qr_code_url or '',
+                "sound_notification": user.sound_notifications,
+                "email_notification": user.email_notifications
             }, status=status.HTTP_200_OK)
 
         except ValueError as e:
@@ -417,13 +421,15 @@ class LoginView(APIView):
             'username': user.username or '',
             "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
             "gender": user.gender,
-            "picture_url": user.picture_url or '',
+            "picture_url": user.get_picture_url() or '',
             "user_token": token.key,
             "above_legal_age": user.above_legal_age,
             "terms_and_conditions": user.terms_and_conditions,
             "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
             "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
-            "qr_code_url": user.qr_code_url or ''
+            "qr_code_url": user.qr_code_url or '',
+            "sound_notification": user.sound_notifications,
+            "email_notification": user.email_notifications
         }, status=status.HTTP_200_OK)
     
 
@@ -607,12 +613,14 @@ class PasskeyRegistrationVerifyView(APIView):
                     'username': user.username or '',
                     "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
                     "gender": user.gender,
-                    "picture_url": user.picture_url or '',
+                    "picture_url": user.get_picture_url() or '',
                     "above_legal_age": user.above_legal_age,
                     "terms_and_conditions": user.terms_and_conditions,
                     "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
                     "qr_code_url": user.qr_code_url or '',
-                    "next_step": "welcome" if user.hobbies.exists() else "hobbies"
+                    "next_step": "welcome" if user.hobbies.exists() else "hobbies",
+                    "sound_notification": user.sound_notifications,
+                    "email_notification": user.email_notifications,
                 }, status=status.HTTP_200_OK)
                 
             except InvalidRegistrationResponse as e:
@@ -722,13 +730,15 @@ class PasskeyLoginVerifyView(APIView):
                 'username': user.username or '',
                 "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
                 "gender": user.gender,
-                "picture_url": user.picture_url or '',
+                "picture_url": user.get_picture_url() or '',
                 "user_token": token.key,
                 "above_legal_age": user.above_legal_age,
                 "terms_and_conditions": user.terms_and_conditions,
                 "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
                 "next_step": "welcome" if user.hobbies.exists() else "hobbies",
-                "qr_code_url": user.qr_code_url or ''
+                "qr_code_url": user.qr_code_url or '',
+                "sound_notification": user.sound_notifications,
+                "email_notification": user.email_notifications,
             }, status=status.HTTP_200_OK)
             
         except PasskeyCredential.DoesNotExist:

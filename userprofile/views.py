@@ -158,26 +158,27 @@ class UpdateProfileImageView(APIView):
                 
         # Generate URL with timestamp for cache busting
         timestamp = int(time.time())
-        picture_url = f"https://kumele-1.onrender.com{settings.MEDIA_URL}{file_name}?t={timestamp}"
-        print("picture_url: ", picture_url)
+        profile_pic_url = f"{settings.MEDIA_URL}{file_name}?t={timestamp}"
+        print("profile_pic_url: ", profile_pic_url)
         
-        # Use serializer to update picture_url
-        serializer = UpdateProfileImageSerializer(user, data={'picture_url': picture_url}, partial=True)
+        # Update serializer to use profile_pic_url instead of picture_url
+        serializer = UpdateProfileImageSerializer(user, data={'profile_pic_url': profile_pic_url}, partial=True)
         if serializer.is_valid():
-            serializer.save()  # Updates user.picture_url in the database
+            serializer.save()  # Updates user.profile_pic_url in the database
             
             # Refresh the user object from the database
             user.refresh_from_db()
             
             # Check if the update was successful
-            if user.picture_url != picture_url:
+            if user.profile_pic_url != profile_pic_url:
                 return Response({"error": "Failed to update picture URL"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Regenerate QR code with the new picture_url
+            # Regenerate QR code with the new picture URL
+            picture_url_to_use = user.get_picture_url()  # Use the helper method
             qr_data = (
-                f"Username: {user.username}\nPicture URL: {user.picture_url}"
+                f"Username: {user.username}\nPicture URL: {picture_url_to_use}"
                 if user.username
-                else f"Name: {user.name}\nPicture URL: {user.picture_url}"
+                else f"Name: {user.name}\nPicture URL: {picture_url_to_use}"
             )
 
             try:
@@ -216,7 +217,7 @@ class UpdateProfileImageView(APIView):
 
                 return Response({
                     "message": "Profile image updated and QR code regenerated",
-                    "picture_url": user.picture_url,
+                    "picture_url": picture_url_to_use,  # Return the appropriate URL
                     "qr_code_url": user.qr_code_url
                 }, status=status.HTTP_200_OK)
 
