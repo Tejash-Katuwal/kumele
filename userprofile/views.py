@@ -158,8 +158,9 @@ class UpdateProfileImageView(APIView):
                 
         # Generate URL with timestamp for cache busting
         timestamp = int(time.time())
-        profile_pic_url = f"{settings.MEDIA_URL}{file_name}?t={timestamp}"
-        print("profile_pic_url: ", profile_pic_url)
+        domain = request.build_absolute_uri('/').rstrip('/')  # Get domain with protocol
+        media_url = settings.MEDIA_URL.lstrip('/')  # Remove leading slash if present
+        profile_pic_url = f"{domain}/{media_url}{file_name}?t={timestamp}"
         
         # Update serializer to use profile_pic_url instead of picture_url
         serializer = UpdateProfileImageSerializer(user, data={'profile_pic_url': profile_pic_url}, partial=True)
