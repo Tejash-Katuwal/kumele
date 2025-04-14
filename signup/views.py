@@ -2,11 +2,12 @@ import base64
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import CustomUser, Referral, PasskeyCredential
+from .models import CustomUser, Referral, PasskeyCredential, Medal
 from .serializers import (SignupSerializer, 
     VerifyEmailSerializer, 
     GoogleSignInSerializer,
@@ -15,7 +16,8 @@ from .serializers import (SignupSerializer,
     PasskeyRegistrationOptionsSerializer, 
     PasskeyRegistrationVerifySerializer,
     PasskeyLoginOptionsSerializer,
-    PasskeyLoginVerifySerializer)
+    PasskeyLoginVerifySerializer,
+    MedalSerializer)
 import random
 import string
 from google.oauth2 import id_token
@@ -37,6 +39,10 @@ import secrets
 import json
 from webauthn.helpers.structs import AuthenticatorSelectionCriteria
 from rest_framework.authentication import TokenAuthentication
+from django.shortcuts import redirect
+from .utils import MedalManager
+
+
 
 def bytes_to_base64url(bytes_data):
         """Convert bytes to base64url encoding without padding"""
@@ -220,35 +226,46 @@ class GoogleSignInView(APIView):
                 serializer.save()
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-            token, _ = Token.objects.get_or_create(user=user)
-
-            print(user.qr_code_url)
-
-            # Determine the next step based on user setup status
-            if user.qr_code_url:  # If QR code exists, user has completed setup
-                next_step = 'welcome'
+            
+            if user.two_factor_enabled:
+                request.session['awaiting_2fa_email'] = email
+                return Response({
+                    "message": "Please enter your two-factor authentication code",
+                    "requires_2fa": True
+                }, status=status.HTTP_200_OK)
+            
             else:
-                next_step = 'permissions'
 
-            return Response({
-                'message': 'Google Sign-In successful',
-                'referral_code': user.referral_code,
-                'name': user.name,
-                'email': user.email,
-                'username': user.username or '',
-                'dob': user.date_of_birth if user.date_of_birth else '',
-                'gender': user.gender if user.gender else '',
-                'picture_url': user.get_picture_url() or '',
-                'user_token': token.key,
-                'above_legal_age': user.above_legal_age,
-                'terms_and_conditions': user.terms_and_conditions,
-                'hobbies': HobbySerializer(user.hobbies.all(), many=True).data,
-                'next_step': next_step,
-                'qr_code_url': user.qr_code_url or '',
-                "sound_notification": user.sound_notifications,
-                "email_notification": user.email_notifications
-            }, status=status.HTTP_200_OK)
+                token, _ = Token.objects.get_or_create(user=user)
+
+                print(user.qr_code_url)
+
+                # Determine the next step based on user setup status
+                if user.qr_code_url:  # If QR code exists, user has completed setup
+                    next_step = 'welcome'
+                else:
+                    next_step = 'permissions'
+
+                return Response({
+                    'message': 'Google Sign-In successful',
+                    'referral_code': user.referral_code,
+                    'name': user.name,
+                    'user_id': user.id,
+                    'email': user.email,
+                    'username': user.username or '',
+                    'dob': user.date_of_birth if user.date_of_birth else '',
+                    'gender': user.gender if user.gender else '',
+                    'picture_url': user.get_picture_url() or '',
+                    'user_token': token.key,
+                    'above_legal_age': user.above_legal_age,
+                    'terms_and_conditions': user.terms_and_conditions,
+                    'hobbies': HobbySerializer(user.hobbies.all(), many=True).data,
+                    'next_step': next_step,
+                    'qr_code_url': user.qr_code_url or '',
+                    "sound_notification": user.sound_notifications,
+                    "two_factor_status": user.two_factor_enabled,
+                    "email_notification": user.email_notifications
+                }, status=status.HTTP_200_OK)
 
         except ValueError as e:
             return Response({'error': f'Invalid Google token: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
@@ -394,7 +411,7 @@ class LoginView(APIView):
             )
 
         # Authenticate user
-        user = authenticate(username=email, password=password)  # Django uses username field for authentication
+        user = authenticate(username=email, password=password)  
 
         if not user:
             return Response(
@@ -409,28 +426,39 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Get or create token
-        token, _ = Token.objects.get_or_create(user=user)
+        if user.two_factor_enabled:
+            request.session['awaiting_2fa_email'] = email
+            return Response({
+                "message": "Please enter your two-factor authentication code",
+                "requires_2fa": True
+            }, status=status.HTTP_200_OK)
+        
 
-        # Return user data including the QR code URL
-        return Response({
-            "message": "Login successful",
-            "referral_code": user.referral_code,
-            "name": user.name,
-            "email": user.email,
-            'username': user.username or '',
-            "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
-            "gender": user.gender,
-            "picture_url": user.get_picture_url() or '',
-            "user_token": token.key,
-            "above_legal_age": user.above_legal_age,
-            "terms_and_conditions": user.terms_and_conditions,
-            "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
-            "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
-            "qr_code_url": user.qr_code_url or '',
-            "sound_notification": user.sound_notifications,
-            "email_notification": user.email_notifications
-        }, status=status.HTTP_200_OK)
+        else:
+
+            # Get or create token
+            token, _ = Token.objects.get_or_create(user=user)
+
+            # Return user data including the QR code URL
+            return Response({
+                "message": "Login successful",
+                "two_factor_status": user.two_factor_enabled,
+                "referral_code": user.referral_code,
+                "name": user.name,
+                "email": user.email,
+                'username': user.username or '',
+                "dob": user.date_of_birth.isoformat() if user.date_of_birth else '',
+                "gender": user.gender,
+                "picture_url": user.get_picture_url() or '',
+                "user_token": token.key,
+                "above_legal_age": user.above_legal_age,
+                "terms_and_conditions": user.terms_and_conditions,
+                "hobbies": HobbySerializer(user.hobbies.all(), many=True).data,
+                "next_step": "welcome" if user.hobbies.exists() else "hobbies",  
+                "qr_code_url": user.qr_code_url or '',
+                "sound_notification": user.sound_notifications,
+                "email_notification": user.email_notifications
+            }, status=status.HTTP_200_OK)
     
 
 class UpdateUserDetailsView(APIView):
@@ -754,3 +782,124 @@ class PasskeyTestPageView(APIView):
 
     def get(self, request):
         return render(request, 'signup/passkey_test_page.html')
+    
+
+class PrivacyPolicyView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self,request):
+        return render(request,'signup/privacypolicy.html')
+    
+class UserAgreementView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self,request):
+        return render(request,'signup/useragreement.html')
+
+
+class PayPalConnectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Construct the PayPal OAuth2 authorization URL
+        auth_url = (
+            f"{settings.PAYPAL_AUTH_URL}?client_id={settings.PAYPAL_CLIENT_ID}"
+            f"&response_type=code&scope={settings.PAYPAL_SCOPES}"
+            f"&redirect_uri={settings.PAYPAL_REDIRECT_URI}"
+        )
+        return redirect(auth_url)
+    
+class PayPalCallbackView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        code = request.GET.get('code')
+        if not code:
+            return Response({"error": "Authorization code not provided."}, status=400)
+
+        # Exchange the authorization code for access and refresh tokens
+        try:
+            # Encode client ID and secret for Basic Auth
+            auth_str = f"{settings.PAYPAL_CLIENT_ID}:{settings.PAYPAL_CLIENT_SECRET}"
+            auth_header = "Basic " + base64.b64encode(auth_str.encode()).decode()
+
+            response = requests.post(
+                settings.PAYPAL_TOKEN_URL,
+                headers={
+                    "Authorization": auth_header,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": settings.PAYPAL_REDIRECT_URI,
+                }
+            )
+            response_data = response.json()
+
+            if response.status_code != 200:
+                print(f"PayPal token exchange failed: {response_data}")
+                return Response({"error": "Failed to authenticate with PayPal."}, status=400)
+
+            access_token = response_data.get("access_token")
+            refresh_token = response_data.get("refresh_token")
+
+            if not access_token or not refresh_token:
+                return Response({"error": "Invalid token response from PayPal."}, status=400)
+
+            # Use the access token to get the user's PayPal identity (optional)
+            identity_response = requests.get(
+                "https://api-m.sandbox.paypal.com/v1/identity/openidconnect/userinfo?schema=openid",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            identity_data = identity_response.json()
+
+            if identity_response.status_code != 200:
+                print(f"PayPal identity fetch failed: {identity_data}")
+                return Response({"error": "Failed to fetch PayPal identity."}, status=400)
+
+            paypal_account_id = identity_data.get("user_id")  # Unique PayPal account identifier
+
+            # Save the tokens and account ID to the user's profile
+            user = request.user
+            user.paypal_access_token = access_token
+            user.paypal_refresh_token = refresh_token
+            user.paypal_account_id = paypal_account_id
+            user.save()
+
+            # Redirect to the frontend profile page (you can adjust the URL)
+            return redirect("http://localhost:3000/profile?paypal=connected")
+        except Exception as e:
+            print(f"Error in PayPal callback: {str(e)}")
+            return Response({"error": str(e)}, status=400)
+        
+class PayPalDisconnectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if not user.paypal_access_token:
+            return Response({"message": "No PayPal account connected."}, status=200)
+
+        # Clear PayPal-related fields
+        user.paypal_access_token = None
+        user.paypal_refresh_token = None
+        user.paypal_account_id = None
+        user.save()
+
+        return Response({"message": "PayPal account disconnected successfully."}, status=200)
+    
+
+class UserMedalsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Update medals before fetching
+            MedalManager.assign_medals(request.user)
+            medals = Medal.objects.filter(user=request.user).order_by('-awarded_at')
+            serializer = MedalSerializer(medals, many=True)
+            return Response(serializer.data, status=200)
+        except Exception as e:
+            print(f"Error fetching medals for user {request.user.id}: {str(e)}")
+            return Response({"error": str(e)}, status=400)

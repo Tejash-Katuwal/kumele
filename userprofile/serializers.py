@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from signup.models import CustomUser
 
-
 class UserSearchSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
 
@@ -35,14 +34,34 @@ class FollowerFollowingSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+    picture_url = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    gold_status = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
         fields = [
-            'bio',
-            'sound_notifications',
-            'email_notifications',
-            'theme_mode',
+            'display_name', 'bio', 'picture_url', 'qr_code_url',
+            'followers_count', 'following_count', 'gold_status',
+            'sound_notifications', 'email_notifications', 'theme_mode'
         ]
+
+    def get_display_name(self, obj):
+        return obj.username if obj.username else obj.name
+
+    def get_picture_url(self, obj):
+        return obj.get_picture_url()
+
+    def get_followers_count(self, obj):
+        return obj.followers.count()
+
+    def get_following_count(self, obj):
+        return obj.following.count()
+
+    def get_gold_status(self, obj):
+        return obj.reward_points
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -60,3 +79,6 @@ class UpdateProfileImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['picture_url', 'profile_pic_url']
+
+
+

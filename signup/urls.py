@@ -12,6 +12,12 @@ from .views import (SignupView,
     PasskeyLoginOptionsView,
     PasskeyLoginVerifyView,
     PasskeyTestPageView,
+    PayPalConnectView,
+    PayPalCallbackView,
+    PayPalDisconnectView,
+    PrivacyPolicyView,
+    UserAgreementView,
+    UserMedalsView
 )
 
 urlpatterns = [
@@ -27,6 +33,12 @@ urlpatterns = [
     path('passkey/login/options/', PasskeyLoginOptionsView.as_view(), name='passkey_login_options'),
     path('passkey/login/verify/', PasskeyLoginVerifyView.as_view(), name='passkey_login_verify'),
     path('passkey-test-page/', PasskeyTestPageView.as_view(), name='passkey-test-page'),
+    path('privacy-policy/', PrivacyPolicyView.as_view(), name='PrivacyPolicy'),
+    path('useragreement/', UserAgreementView.as_view(), name='UserAgreement'),
     path('account/delete/', DeleteUserAccountView.as_view(), name='delete-account'), 
+    path('paypal/connect/', PayPalConnectView.as_view(), name='paypal-connect'),
+    path('paypal/callback/', PayPalCallbackView.as_view(), name='paypal-callback'),
+    path('paypal/disconnect/', PayPalDisconnectView.as_view(), name='paypal-disconnect'),
+    path('medals/', UserMedalsView.as_view(), name='user-medals'),
 
 ]

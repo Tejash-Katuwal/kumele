@@ -64,6 +64,15 @@ class FollowerFollowingAPIView(APIView):
         return Response(data, status=status.HTTP_200_OK)
     
 
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class EditBioView(APIView):
     permission_classes = [IsAuthenticated]
 

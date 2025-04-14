@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import CustomUser, Referral, PasskeyCredential
+from .models import CustomUser, Medal, Referral, PasskeyCredential
 from hobbies.serializers import HobbySerializer
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -146,3 +146,9 @@ class PasskeyLoginOptionsSerializer(serializers.Serializer):
 class PasskeyLoginVerifySerializer(serializers.Serializer):
     # email = serializers.EmailField()
     assertion = serializers.JSONField()
+
+
+class MedalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Medal
+        fields = ['medal_type', 'awarded_at', 'discount_percentage', 'discount_expires_at']

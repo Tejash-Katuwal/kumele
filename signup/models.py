@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 import uuid
+from encrypted_model_fields.fields import EncryptedCharField
 
 class CustomUser(AbstractUser):
     name = models.CharField(max_length=100, blank=True)
@@ -42,6 +43,7 @@ class CustomUser(AbstractUser):
     last_username_change = models.DateTimeField(null=True, blank=True)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
     qr_code_url = models.URLField(max_length=200, blank=True, default='')
+    two_factor_enabled = models.BooleanField(default=False)
 
     bio = models.TextField(max_length=500, blank=True, default="")  
     sound_notifications = models.BooleanField(default=True) 
@@ -50,6 +52,10 @@ class CustomUser(AbstractUser):
         ('bright', 'Bright'),
         ('night', 'Night'),
     ], default='bright')
+
+    paypal_access_token = EncryptedCharField(max_length=255, blank=True, null=True)
+    paypal_refresh_token = EncryptedCharField(max_length=255, blank=True, null=True)
+    paypal_account_id = models.CharField(max_length=100, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
@@ -94,3 +100,25 @@ class PasskeyCredential(models.Model):
         
     def __str__(self):
         return f"Passkey for {self.user.email} ({self.name})"
+    
+
+class Medal(models.Model):
+    MEDAL_TYPES = (
+        ('GOLD', 'Gold'),
+        ('SILVER', 'Silver'),
+        ('BRONZE', 'Bronze'),
+    )
+
+    user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, related_name='medals')
+    medal_type = models.CharField(max_length=10, choices=MEDAL_TYPES)
+    awarded_at = models.DateTimeField(auto_now_add=True)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    discount_expires_at = models.DateTimeField(null=True, blank=True)
+    period_start = models.DateTimeField()  # Start of the month
+    period_end = models.DateTimeField()    # End of the month
+
+    class Meta:
+        unique_together = ('user', 'medal_type', 'period_start')  # No duplicate medals per type per period
+
+    def __str__(self):
+        return f"{self.user.email} - {self.medal_type} ({self.period_start.strftime('%Y-%m')})"
