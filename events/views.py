@@ -31,7 +31,7 @@ from django.db.models import Sum, DecimalField
 # Set up logging
 logger = logging.getLogger(__name__)
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
+stripe.api_key = settings.STRIPE_KEY
 
 # print("stripe key: ",settings.STRIPE_SECRET_KEY)
 

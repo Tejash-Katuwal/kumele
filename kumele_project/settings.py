@@ -281,3 +281,5 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL")
 
 # FIELD_ENCRYPTION_KEY = 'YxvnSdzJGaruJLG8t0mpJE70jXothUeKTLrYAyJjr7w='
 FIELD_ENCRYPTION_KEY = os.environ.get("FIELD_ENCRYPTION_KEY")
+
+STRIPE_KEY = os.environ.get("STRIPE_KEY")
