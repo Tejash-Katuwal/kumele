@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from hobbies.models import Hobby
-from .models import Event, EventPayment, UserAvailability, GuestPricing
+from .models import Event, EventPayment, EventAttendeePayment, UserAvailability, GuestPricing
 from hobbies.serializers import HobbySerializer
 from django.utils import timezone
 
@@ -50,9 +50,26 @@ class EventPaymentSerializer(serializers.ModelSerializer):
         fields = ['id', 'event', 'user', 'amount', 'is_paid', 'payment_date', 'transaction_id']
         read_only_fields = []
 
+
+class EventAttendeePaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventAttendeePayment
+        fields = ['id', 'event', 'user', 'amount', 'is_paid', 'payment_date', 'transaction_id']
+        read_only_fields = []
+
+
 class UserAvailabilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAvailability
         fields = ['id', 'user', 'start_time', 'end_time']
         read_only_fields = ['user']
 
+class EventEarningsSerializer(serializers.Serializer):
+    event_id = serializers.IntegerField()
+    event_name = serializers.CharField()
+    earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+class UserEarningsSerializer(serializers.Serializer):
+    month = serializers.CharField()
+    total_earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+    events = EventEarningsSerializer(many=True)

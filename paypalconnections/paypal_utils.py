@@ -2,6 +2,7 @@ import requests
 from django.conf import settings
 from base64 import b64encode
 
+
 def get_paypal_access_token():
     url = "https://api-m.sandbox.paypal.com/v1/oauth2/token"
     headers = {

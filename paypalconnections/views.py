@@ -1,3 +1,4 @@
+import base64
 import zlib
 from django.conf import settings
 from django.shortcuts import redirect
@@ -13,36 +14,46 @@ import hmac
 import hashlib
 from paypalconnections.paypal_utils import get_paypal_access_token
 from signup.models import CustomUser
-from .models import PayPalAccount
+from .models import PayPalAccount, PayPalTransaction
 
 class ConnectPayPalView(APIView):
-    """Initiate PayPal seller onboarding using the Partner Referrals API"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Store user ID in session to retrieve in callback
-        request.session['connecting_user_id'] = request.user.id
+        # Get platform from query parameters
+        platform = request.query_params.get('platform', 'web')
+        user_id = request.user.id
+        
+        # Store user ID in session for web only
+        if platform == 'web':
+            request.session['connecting_user_id'] = user_id
+            return_url = "http://127.0.0.1:8000/api/paypal-onboarding-callback/?platform=web"
+        elif platform == 'ios':
+            # For iOS, use a deep link URL scheme
+            return_url = f"kumele://paypal-callback?user_id={user_id}&platform=ios"
+        elif platform == 'android':
+            # For Android, use a deep link URL scheme
+            return_url = f"kumele://paypal-callback?user_id={user_id}&platform=android"
+        else:
+            return Response({"error": "Invalid platform"}, status=400)
 
-        # Get PayPal access token
+        # Get platform's access token (using client ID and secret)
         try:
             access_token = get_paypal_access_token()
         except Exception as e:
-            return Response({"error": "Failed to get access token", "details": str(e)}, status=400)
+            return Response({"error": "Failed to connect to PayPal", "details": str(e)}, status=400)
 
-        # Define the return URL (must be publicly accessible)
-        return_url = "https://airedale-destined-antelope.ngrok-free.app/api/paypal-onboarding-callback/"
-
-        # Prepare the Partner Referrals API request
+        # Prepare the request to PayPal's Partner Referrals API
         url = "https://api-m.sandbox.paypal.com/v2/customer/partner-referrals"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
         data = {
-            "products": ["EXPRESS_CHECKOUT"],  # Use PPCP for advanced features like Expanded Checkout
+            "products": ["EXPRESS_CHECKOUT"],  # Basic PayPal checkout
             "partner_config_override": {
                 "return_url": return_url,
-                "return_url_description": "Return to the platform after onboarding",
+                "return_url_description": "Return to our platform",
             },
             "operations": [
                 {
@@ -58,26 +69,34 @@ class ConnectPayPalView(APIView):
                     }
                 }
             ],
-            # Pre-fill seller data (optional)
+            "legal_consents": [
+                {
+                    "type": "SHARE_DATA_CONSENT",
+                    "granted": True
+                }
+            ],
             "business_entity": {
-                "email": request.user.email,
+                "email": request.user.email,  # Pre-fill seller's email
             },
-            # Tracking ID to monitor onboarding status
-            "tracking_id": f"seller-{request.user.id}",
+            "tracking_id": f"seller-{request.user.id}-{platform}",  # Include platform in tracking ID
         }
 
-        # Make the API call to generate the sign-up link
+        # Send the request to PayPal
         try:
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()
             response_data = response.json()
-            # Extract the action_url from the response links
+
+            # Find the sign-up URL in PayPal's response
             action_url = next(
                 link["href"] for link in response_data["links"] if link["rel"] == "action_url"
             )
-            return Response({"action_url": action_url})
+            return Response({
+                "action_url": action_url,
+                "platform": platform
+            })
         except Exception as e:
-            return Response({"error": "Failed to initiate PayPal onboarding", "details": str(e)}, status=400)
+            return Response({"error": "Failed to start onboarding", "details": str(e)}, status=400)
     
 
 class PayPalOnboardingCallbackView(APIView):
@@ -86,84 +105,74 @@ class PayPalOnboardingCallbackView(APIView):
 
     def get(self, request):
         # Extract query parameters
-        auth_code = request.query_params.get("authCode")
-        shared_id = request.query_params.get("sharedId")
+
+        print("The endpoint has reached here above extracting query parameters!!!!\n")
+
         seller_merchant_id = request.query_params.get("merchantIdInPayPal")
+        permissions_granted = request.query_params.get("permissionsGranted") == "true"
+        consent_status = request.query_params.get("consentStatus") == "true"
+        merchant_id = request.query_params.get("merchantId")
+        platform = request.query_params.get("platform", "web")
 
-        if not all([auth_code, shared_id, seller_merchant_id]):
-            return Response({"error": "Missing required query parameters"}, status=400)
 
-        # Retrieve user ID from session
-        user_id = request.session.get('connecting_user_id')
+        print("merchant ID: ", merchant_id)
+
+        
+        # Check for required parameters
+        if not seller_merchant_id:
+            return Response({"error": "Missing merchantIdInPayPal parameter"}, status=400)
+            
+        # Verify permissions and consent
+        if not (permissions_granted and consent_status):
+            return Response({"error": "Permissions or consent not granted"}, status=400)
+        
+        print("\nThe endpoint has reached here!!!!")
+
+        # Extract user ID from merchantId parameter if available
+        user_id = None
+        if merchant_id and merchant_id.startswith("seller-"):
+            try:
+                user_id = int(merchant_id.split("-")[1])
+            except (IndexError, ValueError):
+                pass
+
+                
+        # If still not found, try session as fallback (for web)
+        if not user_id and platform == "web":
+            user_id = request.session.get('connecting_user_id')
+            
         if not user_id:
-            return Response({"error": "User session not found"}, status=400)
+            return Response({"error": "User identification not found"}, status=400)
 
         try:
             user = CustomUser.objects.get(id=user_id)
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=400)
-
-        # Get PayPal access token (your platform's token)
-        try:
-            access_token = get_paypal_access_token()
-        except Exception as e:
-            return Response({"error": "Failed to get access token", "details": str(e)}, status=400)
-
-        # Exchange authCode for seller's access token
-        url = "https://api-m.sandbox.paypal.com/v1/oauth2/token"
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        data = {
-            "grant_type": "authorization_code",
-            "code": auth_code,
-            "shared_id": shared_id,
-        }
-        try:
-            response = requests.post(url, headers=headers, data=data)
-            response.raise_for_status()
-            token_data = response.json()
-            seller_access_token = token_data["access_token"]
-        except Exception as e:
-            return Response({"error": "Failed to get seller access token", "details": str(e)}, status=400)
-
-        # Get seller's REST API credentials
-        url = f"https://api-m.sandbox.paypal.com/v1/customer/partners/{settings.PAYPAL_PARTNER_MERCHANT_ID}/merchant-integrations/credentials/"
-        headers = {
-            "Authorization": f"Bearer {seller_access_token}",
-            "Content-Type": "application/json",
-        }
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            credentials = response.json()
-            seller_client_id = credentials["client_id"]
-            seller_client_secret = credentials["client_secret"]
-        except Exception as e:
-            return Response({"error": "Failed to get seller credentials", "details": str(e)}, status=400)
-
-        # Save the seller's credentials and details to your database
         try:
             PayPalAccount.objects.update_or_create(
                 user=user,
                 defaults={
-                    "paypal_email": user.email,  # Update if you fetch email from PayPal
+                    "paypal_email": user.email,
                     "account_id": seller_merchant_id,
-                    "access_token": seller_access_token,
-                    "client_id": seller_client_id,
-                    "client_secret": seller_client_secret,
                     "is_active": True,
                 }
             )
         except Exception as e:
             return Response({"error": "Failed to save PayPal account", "details": str(e)}, status=400)
 
-        # Clear the session variable
-        request.session.pop('connecting_user_id', None)
-
-        # Redirect to frontend
-        return redirect(settings.FRONTEND_URL + "/account/payment-methods?connected=true")
+        # Clear session if web
+        if platform == "web":
+            request.session.pop('connecting_user_id', None)
+            return redirect(settings.FRONTEND_URL + "/account/payment-methods?connected=true")
+        else:
+            # For mobile, just return a success response
+            return Response({
+                "success": True,
+                "connected": True,
+                "paypal_email": user.email,
+                "account_id": seller_merchant_id,
+            })
+    
 
 class PayPalStatusView(APIView):
     """Get the status of the user's PayPal connection"""
@@ -176,7 +185,6 @@ class PayPalStatusView(APIView):
                 "connected": True,
                 "paypal_email": paypal_account.paypal_email,
                 "account_id": paypal_account.account_id,
-                "token_valid": paypal_account.token_valid
             })
         except PayPalAccount.DoesNotExist:
             return Response({"connected": False})
@@ -197,23 +205,22 @@ class DisconnectPayPalView(APIView):
         
 
 class PayPalWebhookView(APIView):
-    """Handle PayPal webhook events"""
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # Extract headers for verification
+        # Extract headers
         transmission_id = request.headers.get("Paypal-Transmission-Id")
         timestamp = request.headers.get("Paypal-Transmission-Time")
         webhook_id = request.headers.get("Paypal-Webhook-Id")
         crc32_signature = request.headers.get("Paypal-Transmission-Sig")
-        event_type = request.headers.get("Paypal-Event-Type")
+        event_type = request.data.get("event_type")
 
-        if not all([transmission_id, timestamp, webhook_id, crc32_signature, event_type]):
-            return Response({"error": "Missing required headers"}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([transmission_id, timestamp, webhook_id, crc32_signature]):
+            return Response({"error": "Missing headers"}, status=400)
 
-        # Verify the webhook signature
+        # Verify signature
         raw_body = request.body.decode("utf-8")
-        expected_signature = f"{transmission_id}|{timestamp}|{webhook_id}|{crc32(str(raw_body))}"
+        expected_signature = f"{transmission_id}|{timestamp}|{webhook_id}|{zlib.crc32(raw_body.encode('utf-8')) & 0xFFFFFFFF}"
         computed_signature = hmac.new(
             settings.PAYPAL_WEBHOOK_SECRET.encode("utf-8"),
             expected_signature.encode("utf-8"),
@@ -221,39 +228,35 @@ class PayPalWebhookView(APIView):
         ).hexdigest()
 
         if not hmac.compare_digest(computed_signature, crc32_signature):
-            return Response({"error": "Invalid webhook signature"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid signature"}, status=400)
 
-        # Parse the webhook event
-        try:
-            event = json.loads(raw_body)
-        except json.JSONDecodeError:
-            return Response({"error": "Invalid JSON payload"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Process the event based on event_type
+        # Process event
         if event_type == "MERCHANT.ONBOARDING.COMPLETED":
-            # Extract tracking_id to identify the seller
-            tracking_id = event.get("resource", {}).get("tracking_id")
+            tracking_id = request.data.get("resource", {}).get("tracking_id")
+            merchant_id = request.data.get("resource", {}).get("merchant_id")
             if tracking_id and tracking_id.startswith("seller-"):
-                user_id = tracking_id.split("-")[1]
                 try:
+                    user_id = tracking_id.split("-")[1]
                     user = CustomUser.objects.get(id=user_id)
                     paypal_account = PayPalAccount.objects.get(user=user)
-                    paypal_account.is_active = True  # Mark as fully onboarded
+                    paypal_account.account_id = merchant_id
+                    paypal_account.is_active = True
                     paypal_account.save()
                 except (CustomUser.DoesNotExist, PayPalAccount.DoesNotExist):
-                    pass  # Log this error in production
-        elif event_type == "MERCHANT.PARTNER-CONSENT.REVOKED":
-            # Handle permission revocation
-            merchant_id = event.get("resource", {}).get("merchant_id")
+                    print(f"Webhook: Could not find user or account for tracking_id {tracking_id}")
+
+        elif event_type == "CHECKOUT.ORDER.COMPLETED":
+            order_id = request.data.get("resource", {}).get("id")
+            merchant_id = request.data.get("resource", {}).get("purchase_units", [{}])[0].get("payee", {}).get("merchant_id")
             try:
                 paypal_account = PayPalAccount.objects.get(account_id=merchant_id)
-                paypal_account.is_active = False  # Deactivate the account
-                paypal_account.save()
-            except PayPalAccount.DoesNotExist:
-                pass  # Log this error in production
+                transaction = PayPalTransaction.objects.get(transaction_id=order_id)
+                transaction.status = "completed"
+                transaction.save()
+            except (PayPalAccount.DoesNotExist, PayPalTransaction.DoesNotExist):
+                print(f"Webhook: Could not process order {order_id}")
 
-        # Acknowledge the webhook event
-        return Response({"status": "success"}, status=status.HTTP_200_OK)
+        return Response({"status": "success"})
 
 def crc32(data):
     """Compute CRC32 hash for webhook verification"""

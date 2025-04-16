@@ -55,13 +55,24 @@ class FollowerFollowingAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, username, format=None):
-        user = get_object_or_404(CustomUser, username=username)
+        # First try to find by username
+        user = CustomUser.objects.filter(username=username).first()
+        
+        # If not found by username, try to find by name
+        if user is None:
+            user = CustomUser.objects.filter(name=username).first()
+        
+        # If still not found, return 404
+        if user is None:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
         serializer = FollowerFollowingSerializer(user)
         data = [
             {'followers': serializer.data['followers']},
             {'followings': serializer.data['followings']}
         ]
         return Response(data, status=status.HTTP_200_OK)
+
     
 
 class UserProfileView(APIView):

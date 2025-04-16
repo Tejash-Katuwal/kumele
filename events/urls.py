@@ -7,7 +7,10 @@ from .views import (CreateEventView,
     JoinEventView,
     UserPastEventsView,
     OwnEventsView,
-    MatchedEventsView)
+    MatchedEventsView,
+    CaptureAttendeePaymentView,
+    UserEarningsView,
+    )
 
 urlpatterns = [
     path('create-event/', CreateEventView.as_view(), name='create-event'),
@@ -19,4 +22,7 @@ urlpatterns = [
     path('users/<int:user_id>/past-events/', UserPastEventsView.as_view(), name='user-past-events'),
     path('events/own/', OwnEventsView.as_view(), name='own-events'),
     path('events/matched/', MatchedEventsView.as_view(), name='matched-events'),
+    path('paypal/capture-attendee-payment/', CaptureAttendeePaymentView.as_view(), name='capture-attendee-payment'),
+    path('users/earnings/', UserEarningsView.as_view(), name='user-earnings'),
+
 ]

@@ -231,7 +231,8 @@ class GoogleSignInView(APIView):
                 request.session['awaiting_2fa_email'] = email
                 return Response({
                     "message": "Please enter your two-factor authentication code",
-                    "requires_2fa": True
+                    "requires_2fa": True,
+                    "email": user.email
                 }, status=status.HTTP_200_OK)
             
             else:
@@ -430,7 +431,8 @@ class LoginView(APIView):
             request.session['awaiting_2fa_email'] = email
             return Response({
                 "message": "Please enter your two-factor authentication code",
-                "requires_2fa": True
+                "requires_2fa": True,
+                "email": user.email
             }, status=status.HTTP_200_OK)
         
 

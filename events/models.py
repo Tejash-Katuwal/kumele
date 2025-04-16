@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from signup.models import CustomUser
 from hobbies.models import Hobby
-
+from decimal import Decimal
 
 class GuestPricing(models.Model):
     min_guests = models.IntegerField()
@@ -14,6 +14,7 @@ class GuestPricing(models.Model):
 
     def __str__(self):
         return f"{self.min_guests}-{self.max_guests} guests: ${self.price}"
+
 
 class Event(models.Model):
     PAYMENT_TYPES = (
@@ -44,6 +45,12 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=False)  # Active after payment (for paid events)
 
+    def current_attendees_count(self):
+        return self.attendees.count()  # Only counts EventAttendance, not creator
+
+    def is_joinable(self):
+        return self.current_attendees_count() < self.max_guests and self.start_time > timezone.now()
+
     def __str__(self):
         return self.name
 
@@ -56,7 +63,21 @@ class EventPayment(models.Model):
     transaction_id = models.CharField(max_length=100, blank=True)  # For dummy payment
 
     def __str__(self):
-        return f"Payment for {self.event.name}"
+        return f"Platform payment of ${self.amount} for {self.event.name}"
+    
+class EventAttendeePayment(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='attendee_payments')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='event_payments_made')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    is_paid = models.BooleanField(default=False)
+    payment_date = models.DateTimeField(null=True, blank=True)
+    transaction_id = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Attendee payment of ${self.amount} by {self.user.email} for {self.event.name}"
+    
+    
 
 class UserAvailability(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='availabilities')
